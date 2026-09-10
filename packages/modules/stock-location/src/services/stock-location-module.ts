@@ -102,8 +102,7 @@ export default class StockLocationModuleService
     const created = await this.createStockLocations_(input, context)
 
     const serialized = await this.baseRepository_.serialize<
-      | StockLocationTypes.StockLocationDTO
-      | StockLocationTypes.StockLocationDTO[]
+      StockLocationTypes.StockLocationDTO[]
     >(created)
 
     return Array.isArray(data) ? serialized : serialized[0]
@@ -212,8 +211,7 @@ export default class StockLocationModuleService
     const updated = await this.updateStockLocations_(normalizedInput, context)
 
     const serialized = await this.baseRepository_.serialize<
-      | StockLocationTypes.StockLocationDTO
-      | StockLocationTypes.StockLocationDTO[]
+      StockLocationTypes.StockLocationDTO[]
     >(updated)
 
     return Array.isArray(data) ? serialized : serialized[0]
@@ -258,8 +256,7 @@ export default class StockLocationModuleService
     const updated = await this.updateStockLocationAddresses_(input, context)
 
     const serialized = await this.baseRepository_.serialize<
-      | StockLocationTypes.StockLocationAddressDTO
-      | StockLocationTypes.StockLocationAddressDTO[]
+      StockLocationTypes.StockLocationAddressDTO[]
     >(updated)
 
     return Array.isArray(data) ? serialized : serialized[0]
