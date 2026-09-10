@@ -1,4 +1,14 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
+
+interface ReturnReasonRef
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _ReturnReason)["schema"]>,
+    "ReturnReason"
+  > {}
 
 const _ReturnReason = model
   .define("ReturnReason", {
@@ -8,12 +18,12 @@ const _ReturnReason = model
     description: model.text().translatable().nullable(),
     metadata: model.json().nullable(),
     parent_return_reason: model
-      .belongsTo<() => typeof _ReturnReason>(() => _ReturnReason, {
+      .belongsTo<() => ReturnReasonRef>((): ReturnReasonRef => _ReturnReason, {
         mappedBy: "return_reason_children",
       })
       .nullable(),
-    return_reason_children: model.hasMany<() => typeof _ReturnReason>(
-      () => _ReturnReason,
+    return_reason_children: model.hasMany<() => ReturnReasonRef>(
+      (): ReturnReasonRef => _ReturnReason,
       {
         mappedBy: "parent_return_reason",
       }
@@ -40,4 +50,10 @@ const _ReturnReason = model
     },
   ])
 
-export const ReturnReason = _ReturnReason
+interface ReturnReasonModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _ReturnReason)["schema"]>,
+    "ReturnReason"
+  > {}
+
+export const ReturnReason: ReturnReasonModel = _ReturnReason

@@ -1,4 +1,8 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 import { OrderLineItem } from "./line-item"
 
 const _OrderLineItemTaxLine = model
@@ -23,4 +27,11 @@ const _OrderLineItemTaxLine = model
     },
   ])
 
-export const OrderLineItemTaxLine = _OrderLineItemTaxLine
+interface OrderLineItemTaxLineModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderLineItemTaxLine)["schema"]>,
+    "OrderLineItemTaxLine"
+  > {}
+
+export const OrderLineItemTaxLine: OrderLineItemTaxLineModel =
+  _OrderLineItemTaxLine

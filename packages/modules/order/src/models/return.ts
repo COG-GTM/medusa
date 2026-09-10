@@ -1,4 +1,9 @@
-import { model, ReturnStatus } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+  ReturnStatus,
+} from "@medusajs/framework/utils"
 import { OrderClaim } from "./claim"
 import { OrderExchange } from "./exchange"
 import { Order } from "./order"
@@ -87,4 +92,10 @@ const _Return = model
     },
   ])
 
-export const Return = _Return
+export interface ReturnModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _Return)["schema"]>,
+    "Return"
+  > {}
+
+export const Return: ReturnModel = _Return

@@ -403,7 +403,10 @@ export default class OrderModuleService
     return includeTotals
   }
 
-  private addRelationsToCalculateTotals(config: FindConfig<any>, totalFields) {
+  private addRelationsToCalculateTotals(
+    config: FindConfig<any>,
+    totalFields: string[]
+  ) {
     config.relations ??= []
 
     const requiredRelationsForTotals = [
@@ -425,7 +428,7 @@ export default class OrderModuleService
       return (
         !requiredRelationsForTotals.some((val) =>
           (field as string).startsWith(val)
-        ) && !totalFields.includes(field)
+        ) && !totalFields.includes(field as string)
       )
     })
   }
@@ -797,7 +800,7 @@ export default class OrderModuleService
       if (ord.currency_code) {
         ord.currency_code = normalizeCurrencyCode(ord.currency_code)
       }
-      
+
       ord.custom_display_id = await this.generateCustomDisplayId_.bind(this)(
         data_,
         sharedContext
@@ -1092,10 +1095,13 @@ export default class OrderModuleService
         { select: ["id", "version"] },
         sharedContext
       )
-      const mapOrderVersion = order.reduce((acc, curr) => {
-        acc[curr.id] = curr.version
-        return acc
-      }, {})
+      const mapOrderVersion = order.reduce(
+        (acc: Record<string, number>, curr) => {
+          acc[curr.id] = curr.version
+          return acc
+        },
+        {} as Record<string, number>
+      )
 
       const lineItems = data.map((dt) => {
         return {
@@ -1427,10 +1433,13 @@ export default class OrderModuleService
         { select: ["id", "version"] },
         sharedContext
       )
-      const mapOrderVersion = order.reduce((acc, curr) => {
-        acc[curr.id] = curr.version
-        return acc
-      }, {})
+      const mapOrderVersion = order.reduce(
+        (acc: Record<string, number>, curr) => {
+          acc[curr.id] = curr.version
+          return acc
+        },
+        {} as Record<string, number>
+      )
 
       const orderShippingMethodData = data.map((dt) => {
         return {
@@ -2001,7 +2010,7 @@ export default class OrderModuleService
     )
 
     const serialized = await this.baseRepository_.serialize<
-      OrderTypes.OrderLineItemTaxLineDTO[] | OrderTypes.OrderLineItemTaxLineDTO
+      OrderTypes.OrderLineItemTaxLineDTO[]
     >(addedTaxLines)
 
     if (isObject(orderIdOrData)) {
@@ -2194,8 +2203,7 @@ export default class OrderModuleService
     )
 
     const serialized = await this.baseRepository_.serialize<
-      | OrderTypes.OrderShippingMethodTaxLineDTO[]
-      | OrderTypes.OrderShippingMethodTaxLineDTO
+      OrderTypes.OrderShippingMethodTaxLineDTO[]
     >(addedTaxLines)
 
     if (isObject(orderIdOrData)) {
@@ -2542,7 +2550,7 @@ export default class OrderModuleService
   async previewOrderChange(
     orderId: string,
     @MedusaContext() sharedContext: Context = {}
-  ) {
+  ): Promise<OrderTypes.OrderPreviewDTO> {
     const order = await this.retrieveOrder(
       orderId,
       {
@@ -2553,7 +2561,7 @@ export default class OrderModuleService
     )
 
     if (!order.order_change) {
-      return order
+      return order as unknown as OrderTypes.OrderPreviewDTO
     }
 
     const orderChange = await super.retrieveOrderChange(
@@ -2595,23 +2603,25 @@ export default class OrderModuleService
     const orderWithTotals = decorateCartTotals(
       calcOrder as DecorateCartLikeInputDTO
     )
-    calcOrder.summary = calculated.getSummaryFromOrder(orderWithTotals)
+    calcOrder.summary = calculated.getSummaryFromOrder(
+      orderWithTotals as unknown as OrderTypes.OrderDTO
+    )
 
     createRawPropertiesFromBigNumber(calcOrder)
 
-    return calcOrder
+    return calcOrder as unknown as OrderTypes.OrderPreviewDTO
   }
 
   private async includeTaxLinesAndAdjustmentsToPreview(
-    order,
-    itemsToUpsert,
-    shippingMethodsToUpsert,
-    lineItemAdjustmentsToCreate,
-    shippingMethodAdjustmentsToCreate,
+    order: Record<string, any>,
+    itemsToUpsert: Record<string, any>[],
+    shippingMethodsToUpsert: Record<string, any>[],
+    lineItemAdjustmentsToCreate: Record<string, any>[],
+    shippingMethodAdjustmentsToCreate: Record<string, any>[],
     sharedContext: Context = {}
   ) {
-    const addedItems = {}
-    const addedShippingMethods = {}
+    const addedItems: Record<string, any> = {}
+    const addedShippingMethods: Record<string, any> = {}
 
     for (const item of order.items) {
       const isExistingItem = item.id === item.detail?.item_id
@@ -2643,21 +2653,25 @@ export default class OrderModuleService
         sharedContext
       )
 
-      order.items.forEach((item, idx) => {
+      order.items.forEach((item: Record<string, any>, idx: number) => {
         if (!addedItems[item.id]) {
           return
         }
 
-        const lineItem = addedItemDetails.find((d) => d.id === item.id) as any
+        const lineItem = addedItemDetails.find(
+          (d: Record<string, any>) => d.id === item.id
+        ) as any
 
         const actions = item.actions
         delete item.actions
 
         //@ts-ignore
-        const newItem = itemsToUpsert.find((d) => d.item_id === item.id)!
+        const newItem = itemsToUpsert.find(
+          (d: Record<string, any>) => d.item_id === item.id
+        )!
 
         const adjustments = lineItemAdjustmentsToCreate.filter(
-          (d) => d.item_id === newItem.item_id
+          (d: Record<string, any>) => d.item_id === newItem.item_id
         )
 
         const unitPrice = newItem?.unit_price ?? item.unit_price
@@ -2691,7 +2705,7 @@ export default class OrderModuleService
         sharedContext
       )
 
-      order.shipping_methods.forEach((sm, idx) => {
+      order.shipping_methods.forEach((sm: Record<string, any>, idx: number) => {
         if (!addedShippingMethods[sm.id]) {
           return
         }
@@ -2703,10 +2717,12 @@ export default class OrderModuleService
         const actions = sm.actions
         delete sm.actions
 
-        const newItem = shippingMethodsToUpsert.find((d) => d.id === sm.id)!
+        const newItem = shippingMethodsToUpsert.find(
+          (d: Record<string, any>) => d.id === sm.id
+        )!
 
         const adjustments = shippingMethodAdjustmentsToCreate.filter(
-          (d) => d.shipping_method_id === sm.id
+          (d: Record<string, any>) => d.shipping_method_id === sm.id
         )
 
         sm.shipping_method_id = sm.id
@@ -2759,9 +2775,9 @@ export default class OrderModuleService
       ? orderChangeIdOrData
       : [orderChangeIdOrData]
 
-    const orderChangeIds = isString(data[0])
-      ? data
-      : (data as any).map((dt) => dt.id)
+    const orderChangeIds = (
+      isString(data[0]) ? data : (data as { id: string }[]).map((dt) => dt.id)
+    ) as string[]
 
     await this.getAndValidateOrderChange_(orderChangeIds, false, sharedContext)
 
@@ -2776,16 +2792,22 @@ export default class OrderModuleService
     await this.orderChangeService_.update(updates as any, sharedContext)
   }
 
-  async confirmOrderChange(orderChangeId: string, sharedContext?: Context)
-  async confirmOrderChange(orderChangeId: string[], sharedContext?: Context)
+  async confirmOrderChange(
+    orderChangeId: string,
+    sharedContext?: Context
+  ): Promise<OrderTypes.OrderChangeReturn>
+  async confirmOrderChange(
+    orderChangeId: string[],
+    sharedContext?: Context
+  ): Promise<OrderTypes.OrderChangeReturn>
   async confirmOrderChange(
     data: OrderTypes.ConfirmOrderChangeDTO,
     sharedContext?: Context
-  )
+  ): Promise<OrderTypes.OrderChangeReturn>
   async confirmOrderChange(
     data: OrderTypes.ConfirmOrderChangeDTO[],
     sharedContext?: Context
-  )
+  ): Promise<OrderTypes.OrderChangeReturn>
 
   @InjectManager()
   @EmitEvents()
@@ -2820,9 +2842,9 @@ export default class OrderModuleService
       ? orderChangeIdOrData
       : [orderChangeIdOrData]
 
-    const orderChangeIds = isString(data[0])
-      ? data
-      : (data as any).map((dt) => dt.id)
+    const orderChangeIds = (
+      isString(data[0]) ? data : (data as { id: string }[]).map((dt) => dt.id)
+    ) as string[]
 
     const orderChange = await this.getAndValidateOrderChange_(
       orderChangeIds,
@@ -2840,23 +2862,29 @@ export default class OrderModuleService
 
     await this.orderChangeService_.update(updates as any, sharedContext)
 
-    const orderChanges = orderChange.map((change) => {
+    const orderChanges = orderChange.map((change: Record<string, any>) => {
       return change.actions
     })
 
     return await this.applyOrderChanges_(orderChanges.flat(), sharedContext)
   }
 
-  async declineOrderChange(orderChangeId: string, sharedContext?: Context)
-  async declineOrderChange(orderChangeId: string[], sharedContext?: Context)
+  async declineOrderChange(
+    orderChangeId: string,
+    sharedContext?: Context
+  ): Promise<void>
+  async declineOrderChange(
+    orderChangeId: string[],
+    sharedContext?: Context
+  ): Promise<void>
   async declineOrderChange(
     data: OrderTypes.DeclineOrderChangeDTO,
     sharedContext?: Context
-  )
+  ): Promise<void>
   async declineOrderChange(
     data: OrderTypes.DeclineOrderChangeDTO[],
     sharedContext?: Context
-  )
+  ): Promise<void>
 
   @InjectManager()
   @EmitEvents()
@@ -2884,9 +2912,9 @@ export default class OrderModuleService
       ? orderChangeIdOrData
       : [orderChangeIdOrData]
 
-    const orderChangeIds = isString(data[0])
-      ? data
-      : (data as any).map((dt) => dt.id)
+    const orderChangeIds = (
+      isString(data[0]) ? data : (data as { id: string }[]).map((dt) => dt.id)
+    ) as string[]
 
     await this.getAndValidateOrderChange_(orderChangeIds, false, sharedContext)
 
@@ -3538,7 +3566,7 @@ export default class OrderModuleService
     const actions = await this.addOrderAction_(data, sharedContext)
 
     const serializedActions = await this.baseRepository_.serialize<
-      OrderTypes.OrderChangeActionDTO | OrderTypes.OrderChangeActionDTO[]
+      OrderTypes.OrderChangeActionDTO[]
     >(actions)
 
     return Array.isArray(data) ? serializedActions : serializedActions[0]
@@ -3553,7 +3581,7 @@ export default class OrderModuleService
   ): Promise<InferEntityType<typeof OrderChangeAction>[]> {
     let dataArr = Array.isArray(data) ? data : [data]
 
-    const orderChangeMap = {}
+    const orderChangeMap: Record<string, any[]> = {}
     const orderChangeIds = dataArr
       .map((data, idx) => {
         if (data.order_change_id) {
@@ -3734,7 +3762,7 @@ export default class OrderModuleService
     )
 
     const serializedTransactions = await this.baseRepository_.serialize<
-      OrderTypes.OrderTransactionDTO | OrderTypes.OrderTransactionDTO[]
+      OrderTypes.OrderTransactionDTO[]
     >(created)
 
     return Array.isArray(transactionData)
@@ -3937,7 +3965,7 @@ export default class OrderModuleService
       sharedContext
     )
 
-    summaries.forEach((summary) => {
+    summaries.forEach((summary: Record<string, any>) => {
       let trxs = transactionData.filter(
         (trx) => trx.order_id === summary.order_id
       )

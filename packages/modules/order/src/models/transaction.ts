@@ -86,7 +86,10 @@ const _OrderTransaction = model
     },
   ])
 
-export const OrderTransaction = _OrderTransaction as DmlEntity<
-  DMLEntitySchemaBuilder<(typeof _OrderTransaction)["schema"]>,
-  "OrderTransaction"
->
+interface OrderTransactionModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderTransaction)["schema"]>,
+    "OrderTransaction"
+  > {}
+
+export const OrderTransaction: OrderTransactionModel = _OrderTransaction

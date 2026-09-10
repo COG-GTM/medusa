@@ -7,8 +7,11 @@ import {
   promiseAll,
 } from "@medusajs/framework/utils"
 
-function createReturnItems(data) {
-  return data.items.map((item) => ({
+type ReceiveReturnData = OrderTypes.ReceiveOrderReturnDTO & Record<string, any>
+type ReturnItemAction = ReturnType<typeof createReturnItems>[number]
+
+function createReturnItems(data: ReceiveReturnData) {
+  return data.items.map((item: Record<string, any>) => ({
     action: ChangeActionType.RECEIVE_RETURN_ITEM,
     internal_note: item.internal_note,
     reference: data.reference,
@@ -21,11 +24,11 @@ function createReturnItems(data) {
 }
 
 async function createOrderChange(
-  service,
-  data,
-  returnEntry,
-  items,
-  sharedContext
+  service: { createOrderChange_: (...args: any[]) => Promise<any> },
+  data: ReceiveReturnData,
+  returnEntry: Record<string, any>,
+  items: ReturnItemAction[],
+  sharedContext?: Context
 ) {
   return await service.createOrderChange_(
     {
@@ -44,10 +47,15 @@ async function createOrderChange(
   )
 }
 
-function updateReturnItems(returnEntry, items) {
+function updateReturnItems(
+  returnEntry: Record<string, any>,
+  items: ReturnItemAction[]
+) {
   return returnEntry.items
-    .map((item) => {
-      const data = items.find((i) => i.details.reference_id === item.item_id)
+    .map((item: Record<string, any>) => {
+      const data = items.find(
+        (i: ReturnItemAction) => i.details.reference_id === item.item_id
+      )
       if (!data) return
 
       const receivedQuantity = MathBN.add(
@@ -64,13 +72,13 @@ function updateReturnItems(returnEntry, items) {
     .filter(Boolean)
 }
 
-function checkAllItemsReceived(returnEntry) {
-  return returnEntry.items.every((item) =>
+function checkAllItemsReceived(returnEntry: Record<string, any>) {
+  return returnEntry.items.every((item: Record<string, any>) =>
     MathBN.eq(item.received_quantity, item.quantity)
   )
 }
 
-function getReturnUpdateData(hasReceivedAllItems) {
+function getReturnUpdateData(hasReceivedAllItems: boolean) {
   return hasReceivedAllItems
     ? { status: ReturnStatus.RECEIVED, received_at: new Date() }
     : { status: ReturnStatus.PARTIALLY_RECEIVED }

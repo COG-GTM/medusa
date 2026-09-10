@@ -1,4 +1,9 @@
-import { ClaimType, model } from "@medusajs/framework/utils"
+import {
+  ClaimType,
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 import { OrderClaimItem } from "./claim-item"
 import { Order } from "./order"
 import { OrderShipping } from "./order-shipping-method"
@@ -81,4 +86,10 @@ const _OrderClaim = model
     },
   ])
 
-export const OrderClaim = _OrderClaim
+export interface OrderClaimModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderClaim)["schema"]>,
+    "OrderClaim"
+  > {}
+
+export const OrderClaim: OrderClaimModel = _OrderClaim

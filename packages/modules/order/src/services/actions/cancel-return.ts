@@ -11,11 +11,11 @@ import {
 } from "@medusajs/framework/utils"
 
 async function createOrderChange(
-  service,
-  data,
-  returnRef,
-  actions,
-  sharedContext
+  service: { createOrderChange_: (...args: any[]) => Promise<any> },
+  data: OrderTypes.CancelOrderReturnDTO,
+  returnRef: ReturnDTO,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   return await service.createOrderChange_(
     {

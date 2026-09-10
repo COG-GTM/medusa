@@ -27,7 +27,7 @@ export async function applyChangesToOrder(
   actionsMap: Record<string, any[]>,
   options?: {
     addActionReferenceToObject?: boolean
-    includeTaxLinesAndAdjustmentsToPreview?: (...args) => void
+    includeTaxLinesAndAdjustmentsToPreview?: (...args: any[]) => void
   }
 ) {
   const itemsToUpsert: InferEntityType<typeof OrderItem>[] = []
@@ -47,7 +47,10 @@ export async function applyChangesToOrder(
     "no_notification",
   ]
 
-  const calculatedOrders = {}
+  const calculatedOrders: Record<
+    string,
+    ReturnType<typeof calculateOrderChange>
+  > = {}
   for (const order of orders) {
     const calculated = calculateOrderChange({
       order: order as any,
@@ -66,9 +69,11 @@ export async function applyChangesToOrder(
     } = {}
 
     // Editable attributes that have changed
+    const calculatedOrder = calculated.order as Record<string, any>
     for (const attr of orderEditableAttributes) {
-      if (order[attr] !== calculated.order[attr]) {
-        orderAttributes[attr] = calculated.order[attr]
+      if (order[attr] !== calculatedOrder[attr]) {
+        orderAttributes[attr as keyof typeof orderAttributes] =
+          calculatedOrder[attr]
       }
     }
 
@@ -154,11 +159,13 @@ export async function applyChangesToOrder(
         let associatedMethodId
         let hasShippingMethod = false
         if (isNewShippingMethod) {
-          associatedMethodId = shippingMethod_.actions?.find((sm) => {
-            return (
-              sm.action === ChangeActionType.SHIPPING_ADD && sm.reference_id
-            )
-          })
+          associatedMethodId = shippingMethod_.actions?.find(
+            (sm: OrderChangeActionDTO) => {
+              return (
+                sm.action === ChangeActionType.SHIPPING_ADD && sm.reference_id
+              )
+            }
+          )
           hasShippingMethod = !!associatedMethodId
         } else {
           associatedMethodId = shippingMethod_?.detail?.shipping_method_id
@@ -176,16 +183,18 @@ export async function applyChangesToOrder(
           shippingMethodsToUpsert.push(sm)
         }
 
-        shippingMethod_.adjustments?.forEach((adjustment) => {
-          shippingMethodAdjustmentsToCreate.push({
-            shipping_method_id: associatedMethodId,
-            version,
-            amount: adjustment.amount,
-            description: adjustment.description,
-            promotion_id: adjustment.promotion_id,
-            code: adjustment.code,
-          })
-        })
+        shippingMethod_.adjustments?.forEach(
+          (adjustment: Record<string, any>) => {
+            shippingMethodAdjustmentsToCreate.push({
+              shipping_method_id: associatedMethodId,
+              version,
+              amount: adjustment.amount,
+              description: adjustment.description,
+              promotion_id: adjustment.promotion_id,
+              code: adjustment.code,
+            })
+          }
+        )
       }
 
       orderAttributes.version = version

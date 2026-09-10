@@ -15,7 +15,18 @@ import {
 } from "@medusajs/framework/utils"
 import { OrderClaim, OrderClaimItem, Return, ReturnItem } from "@models"
 
-function createClaimAndReturnEntities(em, data, order) {
+type EntityManagerLike = { create: (entity: any, data: any) => any }
+type ClaimService = {
+  orderLineItemService_: { create: (...args: any[]) => Promise<any[]> }
+  createOrderShippingMethods: (...args: any[]) => Promise<any[]>
+  retrieveOrderShippingMethod: (...args: any[]) => Promise<any>
+}
+
+function createClaimAndReturnEntities(
+  em: EntityManagerLike,
+  data: OrderTypes.CreateOrderClaimDTO,
+  order: Record<string, any>
+) {
   const claimReference = em.create(toMikroORMEntity(OrderClaim), {
     order_id: data.order_id,
     order_version: order.version,
@@ -40,7 +51,13 @@ function createClaimAndReturnEntities(em, data, order) {
   return { claimReference, returnReference }
 }
 
-function createReturnItem(em, item, claimReference, returnReference, actions) {
+function createReturnItem(
+  em: EntityManagerLike,
+  item: Record<string, any>,
+  claimReference: Record<string, any>,
+  returnReference: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[]
+) {
   actions.push({
     action: ChangeActionType.RETURN_ITEM,
     reference: "return",
@@ -62,14 +79,14 @@ function createReturnItem(em, item, claimReference, returnReference, actions) {
 }
 
 function createClaimAndReturnItems(
-  em,
-  data,
-  claimReference,
-  returnReference,
-  actions
+  em: EntityManagerLike,
+  data: OrderTypes.CreateOrderClaimDTO,
+  claimReference: Record<string, any>,
+  returnReference: Record<string, any> | undefined,
+  actions: CreateOrderChangeActionDTO[]
 ) {
   const returnItems: (typeof ReturnItem)[] = []
-  const claimItems = data.claim_items?.map((item) => {
+  const claimItems = data.claim_items?.map((item: Record<string, any>) => {
     actions.push({
       action: ChangeActionType.WRITE_OFF_ITEM,
       reference: "claim",
@@ -100,20 +117,20 @@ function createClaimAndReturnItems(
 }
 
 async function processAdditionalItems(
-  em,
-  service,
-  data,
-  order,
-  claimReference,
-  actions,
-  sharedContext
+  em: EntityManagerLike,
+  service: ClaimService,
+  data: OrderTypes.CreateOrderClaimDTO,
+  order: Record<string, any>,
+  claimReference: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   const itemsToAdd: any[] = []
   const additionalNewItems: any[] = []
   const additionalItems: any[] = []
-  data.additional_items?.forEach((item) => {
+  data.additional_items?.forEach((item: Record<string, any>) => {
     const hasItem = item.id
-      ? order.items.find((o) => o.item.id === item.id)
+      ? order.items.find((o: Record<string, any>) => o.item.id === item.id)
       : false
 
     if (hasItem) {
@@ -160,7 +177,7 @@ async function processAdditionalItems(
     sharedContext
   )
 
-  createItems.forEach((item, index) => {
+  createItems.forEach((item: Record<string, any>, index: number) => {
     const addedItem = itemsToAdd[index]
     additionalNewItems[index].item_id = item.id
     actions.push({
@@ -183,11 +200,11 @@ async function processAdditionalItems(
 }
 
 async function processShippingMethods(
-  service,
-  data,
-  claimReference,
-  actions,
-  sharedContext
+  service: ClaimService,
+  data: OrderTypes.CreateOrderClaimDTO,
+  claimReference: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   for (const shippingMethod of data.shipping_methods ?? []) {
     let shippingMethodId
@@ -229,12 +246,12 @@ async function processShippingMethods(
 }
 
 async function processReturnShipping(
-  service,
-  data,
-  claimReference,
-  returnReference,
-  actions,
-  sharedContext
+  service: ClaimService,
+  data: OrderTypes.CreateOrderClaimDTO,
+  claimReference: Record<string, any>,
+  returnReference: Record<string, any> | undefined,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   if (!returnReference) {
     return

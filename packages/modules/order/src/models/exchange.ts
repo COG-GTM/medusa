@@ -1,4 +1,8 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 import { OrderExchangeItem } from "./exchange-item"
 import { Order } from "./order"
 import { OrderShipping } from "./order-shipping-method"
@@ -75,4 +79,10 @@ const _OrderExchange = model
     },
   ])
 
-export const OrderExchange = _OrderExchange
+export interface OrderExchangeModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderExchange)["schema"]>,
+    "OrderExchange"
+  > {}
+
+export const OrderExchange: OrderExchangeModel = _OrderExchange
