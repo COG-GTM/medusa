@@ -13,7 +13,7 @@ class VerificationProviderWithoutIdentifier {
 }
 
 describe("providers loader - MFA", () => {
-  let container
+  let container: ReturnType<typeof createMedusaContainer>
   const logger = {
     error: jest.fn(),
   }
@@ -75,7 +75,7 @@ describe("providers loader - MFA", () => {
 })
 
 describe("providers loader - verification", () => {
-  let container
+  let container: ReturnType<typeof createMedusaContainer>
   const logger = {
     error: jest.fn(),
   }

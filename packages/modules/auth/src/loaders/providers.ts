@@ -1,7 +1,14 @@
-import { asFunction, asValue, Lifetime } from "@medusajs/framework/awilix"
+import {
+  asFunction,
+  asValue,
+  Lifetime,
+  LifetimeType,
+} from "@medusajs/framework/awilix"
 import { moduleProviderLoader } from "@medusajs/framework/modules-sdk"
 import {
+  Constructor,
   LoaderOptions,
+  MedusaContainer,
   ModuleProviderExports,
   ModulesSdkTypes,
 } from "@medusajs/framework/types"
@@ -50,7 +57,21 @@ const validateCloudOptions = (options: AuthModuleOptions["cloud"]) => {
   return true
 }
 
-const registrationFn = async (klass, container, pluginOptions) => {
+type ProviderConstructor = Constructor<unknown> & {
+  identifier?: string
+  LIFE_TIME?: LifetimeType
+}
+
+type ProviderRegistrationOptions = {
+  id?: string
+  options?: unknown
+}
+
+const registrationFn = async (
+  klass: ProviderConstructor,
+  container: MedusaContainer,
+  pluginOptions: ProviderRegistrationOptions
+) => {
   container.register({
     [AuthProviderRegistrationPrefix + pluginOptions.id]: asFunction(
       (cradle) => new klass(cradle, pluginOptions.options ?? {}),
@@ -66,7 +87,11 @@ const registrationFn = async (klass, container, pluginOptions) => {
   )
 }
 
-const mfaRegistrationFn = async (klass, container, pluginOptions) => {
+const mfaRegistrationFn = async (
+  klass: ProviderConstructor,
+  container: MedusaContainer,
+  pluginOptions: ProviderRegistrationOptions
+) => {
   if (!klass?.identifier) {
     throw new MedusaError(
       MedusaError.Types.INVALID_ARGUMENT,
@@ -89,7 +114,11 @@ const mfaRegistrationFn = async (klass, container, pluginOptions) => {
   container.registerAdd(AuthMfaIdentifiersRegistrationName, asValue(id))
 }
 
-const verificationRegistrationFn = async (klass, container, pluginOptions) => {
+const verificationRegistrationFn = async (
+  klass: ProviderConstructor,
+  container: MedusaContainer,
+  pluginOptions: ProviderRegistrationOptions
+) => {
   if (!klass?.identifier) {
     throw new MedusaError(
       MedusaError.Types.INVALID_ARGUMENT,

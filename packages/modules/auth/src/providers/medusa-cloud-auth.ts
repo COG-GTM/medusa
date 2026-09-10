@@ -88,7 +88,7 @@ export class MedusaCloudAuthService extends AbstractAuthModuleProvider {
     })
   }
 
-  async register(_): Promise<AuthenticationResponse> {
+  async register(_: AuthenticationInput): Promise<AuthenticationResponse> {
     throw new MedusaError(
       MedusaError.Types.NOT_ALLOWED,
       "Medusa Cloud does not support registration. Use method `authenticate` instead."
