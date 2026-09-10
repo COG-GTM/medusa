@@ -365,10 +365,10 @@ export default class CustomerModuleService
       }
     }
 
-    const groups = await this.customerGroupService_.update(
+    const groups = (await this.customerGroupService_.update(
       updateData,
       sharedContext
-    )
+    )) as unknown as InferEntityType<typeof CustomerGroup>[]
 
     if (isString(groupIdOrSelector)) {
       return groups[0]
@@ -547,10 +547,10 @@ export default class CustomerModuleService
       }
     }
 
-    const addresses = await this.customerAddressService_.update(
+    const addresses = (await this.customerAddressService_.update(
       updateData,
       sharedContext
-    )
+    )) as unknown as InferEntityType<typeof CustomerAddress>[]
 
     if (isString(addressIdOrSelector)) {
       return addresses[0]
