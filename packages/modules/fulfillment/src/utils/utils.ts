@@ -30,7 +30,7 @@ const operatorsPredicate = {
   in: (contextValue: string, ruleValue: string[]) =>
     ruleValue.includes(contextValue),
   nin: (contextValue: string, ruleValue: string[]) =>
-    !ruleValue.includes(contextValue),
+    ruleValue.includes(contextValue),
   eq: (contextValue: string, ruleValue: string) => contextValue === ruleValue,
   ne: (contextValue: string, ruleValue: string) => contextValue !== ruleValue,
   gt: (contextValue: string, ruleValue: string) => {
@@ -78,11 +78,11 @@ export function isContextValid(
   const { someAreValid } = options
 
   const loopComparator = someAreValid ? rules.some : rules.every
-  const predicate = (rule) => {
+  const predicate = (rule: Rule) => {
     const { attribute, operator, value } = rule
     const contextValue = pickValueFromObject(attribute, context)
 
-    return operatorsPredicate[operator](
+    return operatorsPredicate[operator as keyof typeof operatorsPredicate](
       `${contextValue}`,
       value as string & string[]
     )

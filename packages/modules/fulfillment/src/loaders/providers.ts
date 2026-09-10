@@ -1,6 +1,9 @@
 import { moduleProviderLoader } from "@medusajs/framework/modules-sdk"
 import {
+  Constructor,
+  FulfillmentTypes,
   LoaderOptions,
+  MedusaContainer,
   ModuleProvider,
   ModulesSdkTypes,
 } from "@medusajs/framework/types"
@@ -13,7 +16,14 @@ import { FulfillmentProviderService } from "@services"
 import { FulfillmentIdentifiersRegistrationName } from "@types"
 import { Lifetime, asFunction, asValue } from "@medusajs/framework/awilix"
 
-const registrationFn = async (klass, container, pluginOptions) => {
+const registrationFn = async (
+  klass: Constructor<FulfillmentTypes.IFulfillmentProvider> & {
+    identifier?: string
+    LIFE_TIME?: (typeof Lifetime)[keyof typeof Lifetime]
+  },
+  container: MedusaContainer,
+  pluginOptions: { id?: string; options?: Record<string, unknown> }
+) => {
   const key = FulfillmentProviderService.getRegistrationIdentifier(
     klass,
     pluginOptions.id
@@ -59,7 +69,11 @@ export default async ({
   })
 }
 
-async function syncDatabaseProviders({ container }) {
+async function syncDatabaseProviders({
+  container,
+}: {
+  container: MedusaContainer
+}) {
   const providerServiceRegistrationKey = lowerCaseFirst(
     FulfillmentProviderService.name
   )
@@ -68,7 +82,7 @@ async function syncDatabaseProviders({ container }) {
 
   try {
     const providerIdentifiers: string[] = (
-      container.resolve(FulfillmentIdentifiersRegistrationName) ?? []
+      container.resolve<string[]>(FulfillmentIdentifiersRegistrationName) ?? []
     ).filter(Boolean)
 
     const providerService: ModulesSdkTypes.IMedusaInternalService<any> =
