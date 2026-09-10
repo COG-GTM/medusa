@@ -642,7 +642,10 @@ export function getComputedActionsForBuyGet(
   return computedActions
 }
 
-export function sortByBuyGetType(a, b) {
+export function sortByBuyGetType(
+  a: InferEntityType<typeof Promotion>,
+  b: InferEntityType<typeof Promotion>
+) {
   if (a.type === PromotionType.BUYGET && b.type !== PromotionType.BUYGET) {
     return -1 // BuyGet promotions come first
   } else if (
@@ -651,10 +654,13 @@ export function sortByBuyGetType(a, b) {
   ) {
     return 1 // BuyGet promotions come first
   } else if (a.type === b.type) {
+    const aMethod = a.application_method!
+    const bMethod = b.application_method!
+
     // If types are equal, sort by application_method.value in descending order when types are equal
-    if (a.application_method.value < b.application_method.value) {
+    if (aMethod.value! < bMethod.value!) {
       return 1 // Higher value comes first
-    } else if (a.application_method.value > b.application_method.value) {
+    } else if (aMethod.value! > bMethod.value!) {
       return -1 // Lower value comes later
     }
 
@@ -664,27 +670,17 @@ export function sortByBuyGetType(a, b) {
       - apply_to_quantity in descending order
     */
     if (a.type === PromotionType.BUYGET) {
-      if (
-        a.application_method.buy_rules_min_quantity <
-        b.application_method.buy_rules_min_quantity
-      ) {
+      if (aMethod.buy_rules_min_quantity! < bMethod.buy_rules_min_quantity!) {
         return 1
       } else if (
-        a.application_method.buy_rules_min_quantity >
-        b.application_method.buy_rules_min_quantity
+        aMethod.buy_rules_min_quantity! > bMethod.buy_rules_min_quantity!
       ) {
         return -1
       }
 
-      if (
-        a.application_method.apply_to_quantity <
-        b.application_method.apply_to_quantity
-      ) {
+      if (aMethod.apply_to_quantity! < bMethod.apply_to_quantity!) {
         return 1
-      } else if (
-        a.application_method.apply_to_quantity >
-        b.application_method.apply_to_quantity
-      ) {
+      } else if (aMethod.apply_to_quantity! > bMethod.apply_to_quantity!) {
         return -1
       }
     }

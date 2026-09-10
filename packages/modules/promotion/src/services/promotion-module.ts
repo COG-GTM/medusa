@@ -489,7 +489,10 @@ export default class PromotionModuleService
         }
 
         const attribute = campaignBudget.attribute!
-        const attributeValue = registrationContext[attribute]
+        const attributeValue =
+          registrationContext[
+            attribute as keyof PromotionTypes.CampaignBudgetUsageContext
+          ]
 
         if (!attributeValue) {
           continue
@@ -643,7 +646,10 @@ export default class PromotionModuleService
         }
 
         const attribute = campaignBudget.attribute!
-        const attributeValue = registrationContext[attribute]
+        const attributeValue =
+          registrationContext[
+            attribute as keyof PromotionTypes.CampaignBudgetUsageContext
+          ]
 
         if (!attributeValue) {
           continue
@@ -883,7 +889,10 @@ export default class PromotionModuleService
           ComputeActionUtils.getBudgetUsageContextFromComputeActionContext(
             applicationContext
           )
-        const attributeValue = budgetUsageContext[attribute]
+        const attributeValue =
+          budgetUsageContext[
+            attribute as keyof PromotionTypes.CampaignBudgetUsageContext
+          ]
 
         if (!attributeValue) {
           throw new MedusaError(
