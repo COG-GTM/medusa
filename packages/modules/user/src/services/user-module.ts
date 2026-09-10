@@ -28,6 +28,14 @@ import crypto from "node:crypto"
 import { Invite, User } from "@models"
 import { getExpiresAt } from "../utils/utils"
 
+type UserModuleOptions = {
+  jwt_secret: string
+  jwt_public_key?: string
+  jwt_verify_options?: ProjectConfigOptions["http"]["jwtVerifyOptions"]
+  jwt_options?: ProjectConfigOptions["http"]["jwtOptions"]
+  valid_duration?: number
+}
+
 type InjectedDependencies = {
   baseRepository: DAL.RepositoryService
   userService: ModulesSdkTypes.IMedusaInternalService<any>
@@ -59,7 +67,7 @@ export default class UserModuleService
     jwtPublicKey?: string
     jwt_verify_options: ProjectConfigOptions["http"]["jwtVerifyOptions"]
     jwtOptions: ProjectConfigOptions["http"]["jwtOptions"] & {
-      expiresIn: number
+      expiresIn: string | number
     }
   }
 
@@ -74,15 +82,18 @@ export default class UserModuleService
     this.userService_ = userService
     this.inviteService_ = inviteService
 
+    const options = moduleDeclaration as InternalModuleDeclaration &
+      UserModuleOptions
+
     this.config = {
-      jwtSecret: moduleDeclaration["jwt_secret"],
-      jwtPublicKey: moduleDeclaration["jwt_public_key"],
-      jwt_verify_options: moduleDeclaration["jwt_verify_options"],
+      jwtSecret: options["jwt_secret"],
+      jwtPublicKey: options["jwt_public_key"],
+      jwt_verify_options: options["jwt_verify_options"],
       jwtOptions: {
-        ...moduleDeclaration["jwt_options"],
+        ...options["jwt_options"],
         expiresIn:
-          moduleDeclaration["valid_duration"] ??
-          moduleDeclaration["jwt_options"]?.expiresIn ??
+          options["valid_duration"] ??
+          options["jwt_options"]?.expiresIn ??
           DEFAULT_VALID_INVITE_DURATION_SECONDS,
       },
     }
@@ -227,7 +238,7 @@ export default class UserModuleService
     const users = await this.userService_.create(input, sharedContext)
 
     const serializedUsers = await this.baseRepository_.serialize<
-      UserTypes.UserDTO[] | UserTypes.UserDTO
+      UserTypes.UserDTO[]
     >(users)
 
     return Array.isArray(data) ? serializedUsers : serializedUsers[0]
@@ -285,7 +296,7 @@ export default class UserModuleService
     const invites = await this.createInvites_(input, sharedContext)
 
     const serializedInvites = await this.baseRepository_.serialize<
-      UserTypes.InviteDTO[] | UserTypes.InviteDTO
+      UserTypes.InviteDTO[]
     >(invites)
 
     moduleEventBuilderFactory({
