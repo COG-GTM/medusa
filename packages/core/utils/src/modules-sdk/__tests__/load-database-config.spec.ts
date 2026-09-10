@@ -177,6 +177,25 @@ describe("loadDatabaseConfig", function () {
     })
   })
 
+  it("should keep certificate verification when no-verify only appears outside the query parameters", function () {
+    const options = {
+      database: {
+        clientUrl:
+          "postgres://user:sslmode=no-verify@test.com:5432/sslmode=no-verify",
+      },
+    }
+
+    const config = loadDatabaseConfig("product", options)
+
+    expect(config.driverOptions).toEqual({
+      connection: {
+        ssl: {
+          rejectUnauthorized: true,
+        },
+      },
+    })
+  })
+
   it("should skip certificate verification when the environment opts out", function () {
     process.env.MEDUSA_DATABASE_SSL_REJECT_UNAUTHORIZED = "false"
     const options = {
