@@ -1,8 +1,10 @@
 import { asFunction, asValue, Lifetime } from "@medusajs/framework/awilix"
 import { moduleProviderLoader } from "@medusajs/framework/modules-sdk"
 import {
+  Constructor,
   CreatePaymentProviderDTO,
   LoaderOptions,
+  MedusaContainer,
   ModuleProvider,
   ModulesSdkTypes,
 } from "@medusajs/framework/types"
@@ -13,7 +15,14 @@ import * as providers from "../providers"
 
 const PROVIDER_REGISTRATION_KEY = "payment_providers"
 
-const registrationFn = async (klass, container, pluginOptions) => {
+const registrationFn = async (
+  klass: {
+    identifier?: string
+    LIFE_TIME?: (typeof Lifetime)[keyof typeof Lifetime]
+  },
+  container: MedusaContainer,
+  pluginOptions: { id?: string; options?: Record<string, unknown> }
+) => {
   if (!klass?.identifier) {
     throw new MedusaError(
       MedusaError.Types.INVALID_ARGUMENT,
@@ -26,9 +35,16 @@ const registrationFn = async (klass, container, pluginOptions) => {
   }`
 
   container.register({
-    [key]: asFunction((cradle) => new klass(cradle, pluginOptions.options), {
-      lifetime: klass.LIFE_TIME || Lifetime.SINGLETON,
-    }),
+    [key]: asFunction(
+      (cradle) =>
+        new (klass as unknown as Constructor<unknown>)(
+          cradle,
+          pluginOptions.options
+        ),
+      {
+        lifetime: klass.LIFE_TIME || Lifetime.SINGLETON,
+      }
+    ),
   })
 
   container.registerAdd(PROVIDER_REGISTRATION_KEY, asValue(key))
