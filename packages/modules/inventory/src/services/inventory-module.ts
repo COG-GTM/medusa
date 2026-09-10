@@ -246,7 +246,7 @@ export default class InventoryModuleService
     const created = await this.createReservationItems_(toCreate, context)
 
     const serializedReservations = await this.baseRepository_.serialize<
-      InventoryTypes.ReservationItemDTO[] | InventoryTypes.ReservationItemDTO
+      InventoryTypes.ReservationItemDTO[]
     >(created)
 
     return Array.isArray(input)
@@ -335,7 +335,7 @@ export default class InventoryModuleService
     const result = await this.createInventoryItems_(toCreate, context)
 
     const serializedItems = await this.baseRepository_.serialize<
-      InventoryTypes.InventoryItemDTO | InventoryTypes.InventoryItemDTO[]
+      InventoryTypes.InventoryItemDTO[]
     >(result)
 
     return Array.isArray(input) ? serializedItems : serializedItems[0]
@@ -378,7 +378,7 @@ export default class InventoryModuleService
     const created = await this.createInventoryLevels_(toCreate, context)
 
     const serialized = await this.baseRepository_.serialize<
-      InventoryTypes.InventoryLevelDTO[] | InventoryTypes.InventoryLevelDTO
+      InventoryTypes.InventoryLevelDTO[]
     >(created)
 
     return Array.isArray(input) ? serialized : serialized[0]
@@ -421,7 +421,7 @@ export default class InventoryModuleService
     const result = await this.updateInventoryItems_(updates, context)
 
     const serializedItems = await this.baseRepository_.serialize<
-      InventoryTypes.InventoryItemDTO | InventoryTypes.InventoryItemDTO[]
+      InventoryTypes.InventoryItemDTO[]
     >(result)
 
     return Array.isArray(input) ? serializedItems : serializedItems[0]
@@ -506,7 +506,7 @@ export default class InventoryModuleService
     const levels = await this.updateInventoryLevels_(input, context)
 
     const updatedLevels = await this.baseRepository_.serialize<
-      InventoryTypes.InventoryLevelDTO | InventoryTypes.InventoryLevelDTO[]
+      InventoryTypes.InventoryLevelDTO[]
     >(levels)
 
     return Array.isArray(updates) ? updatedLevels : updatedLevels[0]
@@ -576,7 +576,7 @@ export default class InventoryModuleService
     const result = await this.updateReservationItems_(update, context)
 
     const serialized = await this.baseRepository_.serialize<
-      InventoryTypes.ReservationItemDTO | InventoryTypes.ReservationItemDTO[]
+      InventoryTypes.ReservationItemDTO[]
     >(result)
 
     return Array.isArray(input) ? serialized : serialized[0]
