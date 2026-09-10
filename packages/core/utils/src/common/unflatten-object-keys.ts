@@ -1,5 +1,7 @@
 import { isObject } from "./is-object"
 
+const UNSAFE_PATH_KEYS = new Set(["__proto__", "constructor", "prototype"])
+
 /**
  * unFlatten object keys
  * @example
@@ -34,6 +36,10 @@ export function unflattenObjectKeys(
 
   for (const key in flattened) {
     if (!key.includes(".")) {
+      if (UNSAFE_PATH_KEYS.has(key)) {
+        continue
+      }
+
       if (isObject(result[key])) {
         result[key] = { ...result[key], ...flattened[key] }
       } else {
@@ -46,6 +52,11 @@ export function unflattenObjectKeys(
     if (key.includes(".")) {
       const value = flattened[key]
       const keys = key.split(".")
+
+      if (keys.some((part) => UNSAFE_PATH_KEYS.has(part))) {
+        continue
+      }
+
       let current = result
 
       for (let i = 0; i < keys.length; i++) {
