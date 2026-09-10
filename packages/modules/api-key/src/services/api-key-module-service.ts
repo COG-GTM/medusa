@@ -33,6 +33,7 @@ import {
 import crypto from "crypto"
 import util from "util"
 import { joinerConfig } from "../joiner-config"
+import { constantTimeEqual } from "../utils"
 
 const scrypt = util.promisify(crypto.scrypt)
 
@@ -483,7 +484,7 @@ export class ApiKeyModuleService
           token,
           dbKey.salt
         )
-        if (hashedInput === dbKey.token) {
+        if (constantTimeEqual(hashedInput, dbKey.token)) {
           return dbKey
         }
 
