@@ -30,7 +30,7 @@ const operatorsPredicate = {
   in: (contextValue: string, ruleValue: string[]) =>
     ruleValue.includes(contextValue),
   nin: (contextValue: string, ruleValue: string[]) =>
-    ruleValue.includes(contextValue),
+    !ruleValue.includes(contextValue),
   eq: (contextValue: string, ruleValue: string) => contextValue === ruleValue,
   ne: (contextValue: string, ruleValue: string) => contextValue !== ruleValue,
   gt: (contextValue: string, ruleValue: string) => {
