@@ -60,7 +60,12 @@ export default class FulfillmentProviderService extends ModulesSdkUtils.MedusaIn
     providerId: string
   ): FulfillmentTypes.IFulfillmentProvider {
     try {
-      return this.__container__[`fp_${providerId}`]
+      return (
+        this.__container__ as Record<
+          string,
+          FulfillmentTypes.IFulfillmentProvider
+        >
+      )[`fp_${providerId}`]
     } catch (err) {
       if (err.name === "AwilixResolutionError") {
         const errMessage = `

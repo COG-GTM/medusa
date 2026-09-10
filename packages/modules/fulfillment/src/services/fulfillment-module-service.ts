@@ -969,7 +969,7 @@ export default class FulfillmentModuleService
     )
 
     const toReturn = isString(idOrSelector)
-      ? updatedServiceZones[0]
+      ? updatedServiceZones[0 as keyof typeof updatedServiceZones]
       : updatedServiceZones
 
     return await this.baseRepository_.serialize<
@@ -1144,7 +1144,7 @@ export default class FulfillmentModuleService
     )
 
     const allServiceZones = await this.baseRepository_.serialize<
-      FulfillmentTypes.ServiceZoneDTO[] | FulfillmentTypes.ServiceZoneDTO
+      FulfillmentTypes.ServiceZoneDTO[]
     >(upsertServiceZones)
 
     return Array.isArray(data) ? allServiceZones : allServiceZones[0]
@@ -1245,7 +1245,7 @@ export default class FulfillmentModuleService
     )
 
     const serialized = await this.baseRepository_.serialize<
-      FulfillmentTypes.ShippingOptionDTO | FulfillmentTypes.ShippingOptionDTO[]
+      FulfillmentTypes.ShippingOptionDTO[]
     >(updatedShippingOptions)
 
     return isString(idOrSelector) ? serialized[0] : serialized
@@ -1418,7 +1418,7 @@ export default class FulfillmentModuleService
     )
 
     const allShippingOptions = await this.baseRepository_.serialize<
-      FulfillmentTypes.ShippingOptionDTO[] | FulfillmentTypes.ShippingOptionDTO
+      FulfillmentTypes.ShippingOptionDTO[]
     >(upsertedShippingOptions)
 
     return Array.isArray(data) ? allShippingOptions : allShippingOptions[0]
@@ -1493,8 +1493,7 @@ export default class FulfillmentModuleService
     const results = await this.updateShippingOptionTypes_(data, sharedContext)
 
     const allTypes = await this.baseRepository_.serialize<
-      | FulfillmentTypes.ShippingOptionTypeDTO[]
-      | FulfillmentTypes.ShippingOptionTypeDTO
+      FulfillmentTypes.ShippingOptionTypeDTO[]
     >(results)
 
     return Array.isArray(data) ? allTypes : allTypes[0]
@@ -1672,7 +1671,11 @@ export default class FulfillmentModuleService
     return await this.baseRepository_.serialize<
       | FulfillmentTypes.ShippingProfileDTO[]
       | FulfillmentTypes.ShippingProfileDTO
-    >(Array.isArray(data) ? profiles : profiles[0])
+    >(
+      Array.isArray(data)
+        ? profiles
+        : (profiles as unknown as FulfillmentTypes.ShippingProfileDTO[])[0]
+    )
   }
 
   @InjectTransactionManager()
@@ -2149,7 +2152,7 @@ export default class FulfillmentModuleService
       | (Partial<FulfillmentTypes.UpdateGeoZoneDTO> & { type: string })
     )[]
   ) {
-    const requirePropForType = {
+    const requirePropForType: Record<string, string[]> = {
       country: ["country_code"],
       province: ["country_code", "province_code"],
       city: ["country_code", "province_code", "city"],
@@ -2165,7 +2168,7 @@ export default class FulfillmentModuleService
       }
 
       for (const prop of requirePropForType[geoZone.type]) {
-        if (!geoZone[prop]) {
+        if (!geoZone[prop as keyof typeof geoZone]) {
           throw new MedusaError(
             MedusaError.Types.INVALID_DATA,
             `Missing required property ${prop} for geo zone type ${geoZone.type}`
@@ -2202,7 +2205,7 @@ export default class FulfillmentModuleService
     let normalizedFilters = { ...where }
 
     if (fulfillment_set_id || fulfillment_set_type) {
-      const fulfillmentSetConstraints = {}
+      const fulfillmentSetConstraints: Record<string, unknown> = {}
 
       if (fulfillment_set_id) {
         fulfillmentSetConstraints["id"] = fulfillment_set_id
@@ -2327,12 +2330,13 @@ export default class FulfillmentModuleService
 
     const geoZoneConstraints = Object.entries(geoZoneRequirePropertyHierarchy)
       .map(([prop, { props, type }]) => {
-        if (address![prop]) {
+        const addressRecord = address as Record<string, string | undefined>
+        if (addressRecord[prop]) {
           return {
             type,
             ...props.reduce((geoZoneConstraint, prop) => {
-              if (isPresent(address![prop])) {
-                geoZoneConstraint[prop] = address![prop]
+              if (isPresent(addressRecord[prop])) {
+                geoZoneConstraint[prop] = addressRecord[prop]
               }
               return geoZoneConstraint
             }, {} as Record<string, string | undefined>),
