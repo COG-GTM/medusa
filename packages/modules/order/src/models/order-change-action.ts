@@ -1,4 +1,8 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 
 import { OrderChange } from "./order-change"
 
@@ -69,4 +73,10 @@ const _OrderChangeAction = model
     },
   ])
 
-export const OrderChangeAction = _OrderChangeAction
+interface OrderChangeActionModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderChangeAction)["schema"]>,
+    "OrderChangeAction"
+  > {}
+
+export const OrderChangeAction: OrderChangeActionModel = _OrderChangeAction

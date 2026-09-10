@@ -7,10 +7,12 @@ import {
   toMikroORMEntity,
 } from "@medusajs/framework/utils"
 
+type LooseEntity = Record<string, any>
+
 // Reshape the order object to match the OrderDTO
 // This function is used to format the order object before returning to the main module methods
 export function formatOrder<T = any>(
-  order,
+  order: LooseEntity | LooseEntity[],
   options: {
     entity: any
     includeTotals?: boolean
@@ -34,7 +36,7 @@ export function formatOrder<T = any>(
       mainOrder = order.order
     }
 
-    mainOrder.items = mainOrder.items?.map((orderItem) => {
+    mainOrder.items = mainOrder.items?.map((orderItem: LooseEntity) => {
       const isFormatted = isDefined(orderItem.detail?.fulfilled_quantity)
       if (isFormatted) {
         return orderItem
@@ -77,24 +79,26 @@ export function formatOrder<T = any>(
     }
 
     if (order.shipping_methods) {
-      order.shipping_methods = order.shipping_methods?.map((shippingMethod) => {
-        if (shippingMethod.detail) {
-          return shippingMethod
+      order.shipping_methods = order.shipping_methods?.map(
+        (shippingMethod: LooseEntity) => {
+          if (shippingMethod.detail) {
+            return shippingMethod
+          }
+
+          const sm = { ...shippingMethod.shipping_method }
+
+          delete shippingMethod.shipping_method
+          cleanNestedRelations(shippingMethod)
+
+          return {
+            ...sm,
+            order_id: shippingMethod.order_id,
+            detail: {
+              ...shippingMethod,
+            },
+          }
         }
-
-        const sm = { ...shippingMethod.shipping_method }
-
-        delete shippingMethod.shipping_method
-        cleanNestedRelations(shippingMethod)
-
-        return {
-          ...sm,
-          order_id: shippingMethod.order_id,
-          detail: {
-            ...shippingMethod,
-          },
-        }
-      })
+      )
     }
 
     if (mainOrder.summary) {
@@ -109,7 +113,7 @@ export function formatOrder<T = any>(
   return isArray ? (orders as T) : orders[0]
 }
 
-function cleanNestedRelations(obj) {
+function cleanNestedRelations(obj: unknown) {
   if (!isObject(obj)) {
     return
   }
@@ -121,23 +125,25 @@ function cleanNestedRelations(obj) {
   delete obj_.exchange
 }
 
-function formatOrderReturn(orderReturn, mainOrder) {
-  orderReturn.items?.forEach((orderItem) => {
-    const item = mainOrder.items?.find((item) => item.id === orderItem.item_id)
+function formatOrderReturn(orderReturn: LooseEntity, mainOrder: LooseEntity) {
+  orderReturn.items?.forEach((orderItem: LooseEntity) => {
+    const item = mainOrder.items?.find(
+      (item: LooseEntity) => item.id === orderItem.item_id
+    )
 
     orderItem.detail = item?.detail
   })
 }
 
-function formatClaim(claim) {
+function formatClaim(claim: LooseEntity) {
   if (claim.additional_items) {
     claim.additional_items = claim.additional_items.filter(
-      (item) => item.is_additional_item
+      (item: LooseEntity) => item.is_additional_item
     )
 
-    claim.additional_items.forEach((orderItem) => {
+    claim.additional_items.forEach((orderItem: LooseEntity) => {
       const item = claim.order.items?.find(
-        (item) => item.id === orderItem.item_id
+        (item: LooseEntity) => item.id === orderItem.item_id
       )
       cleanNestedRelations(item)
       orderItem.detail = item?.detail
@@ -149,11 +155,11 @@ function formatClaim(claim) {
   }
 
   claim.claim_items = claim.claim_items.filter(
-    (item) => !item.is_additional_item
+    (item: LooseEntity) => !item.is_additional_item
   )
-  claim.claim_items.forEach((orderItem) => {
+  claim.claim_items.forEach((orderItem: LooseEntity) => {
     const item = claim.order.items?.find(
-      (item) => item.id === orderItem.item_id
+      (item: LooseEntity) => item.id === orderItem.item_id
     )
 
     cleanNestedRelations(item)
@@ -161,14 +167,14 @@ function formatClaim(claim) {
   })
 }
 
-function formatExchange(exchange) {
+function formatExchange(exchange: LooseEntity) {
   if (!exchange.additional_items) {
     return
   }
 
-  exchange.additional_items.forEach((orderItem) => {
+  exchange.additional_items.forEach((orderItem: LooseEntity) => {
     const item = exchange.order.items?.find(
-      (item) => item.id === orderItem.item_id
+      (item: LooseEntity) => item.id === orderItem.item_id
     )
 
     cleanNestedRelations(item)
@@ -176,14 +182,14 @@ function formatExchange(exchange) {
   })
 }
 
-function formatReturn(returnOrder) {
+function formatReturn(returnOrder: LooseEntity) {
   if (!returnOrder.items) {
     return
   }
 
-  returnOrder.items.forEach((orderItem) => {
+  returnOrder.items.forEach((orderItem: LooseEntity) => {
     const item = returnOrder.order.items?.find(
-      (item) => item.id === orderItem.item_id
+      (item: LooseEntity) => item.id === orderItem.item_id
     )
 
     cleanNestedRelations(item)
@@ -195,20 +201,23 @@ function formatReturn(returnOrder) {
 // As the public responses have a different shape than the repository responses, this function is used to map the public properties to the internal db entities
 // e.g "items" is the relation between "line-item" and "order" + "version", The line item itself is in "items.item"
 // This helper maps to the correct repository to query the DB, and the function "formatOrder" remap the response to the public shape
-export function mapRepositoryToOrderModel(config, isRelatedEntity = false) {
+export function mapRepositoryToOrderModel(
+  config: LooseEntity,
+  isRelatedEntity = false
+) {
   if (isRelatedEntity) {
     return mapRepositoryToRelatedEntity(config)
   }
 
   const conf = { ...config }
 
-  function replace(obj, type): string[] | undefined {
+  function replace(obj: LooseEntity, type: string): string[] | undefined {
     if (!isDefined(obj[type])) {
       return
     }
 
     return deduplicate(
-      obj[type].sort().map((rel) => {
+      obj[type].sort().map((rel: string) => {
         if (rel == "summary" && type === "fields") {
           obj.populate.push("summary")
           return "summary.totals"
@@ -274,16 +283,16 @@ export function mapRepositoryToOrderModel(config, isRelatedEntity = false) {
 }
 
 // This function has the same purpose as "mapRepositoryToOrderModel" but for returns, claims and exchanges
-function mapRepositoryToRelatedEntity(config) {
+function mapRepositoryToRelatedEntity(config: LooseEntity) {
   const conf = { ...config }
 
-  function replace(obj, type): string[] | undefined {
+  function replace(obj: LooseEntity, type: string): string[] | undefined {
     if (!isDefined(obj[type])) {
       return
     }
 
     return deduplicate(
-      obj[type].sort().map((rel) => {
+      obj[type].sort().map((rel: string) => {
         if (
           rel.includes("shipping_methods") &&
           !rel.includes("shipping_methods.shipping_method")

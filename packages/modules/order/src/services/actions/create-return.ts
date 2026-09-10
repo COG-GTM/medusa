@@ -15,7 +15,18 @@ import {
 } from "@medusajs/framework/utils"
 import { Return, ReturnItem } from "@models"
 
-function createReturnReference(em, data, order) {
+type EntityManagerLike = { create: (entity: any, data: any) => any }
+type ReturnService = {
+  createOrderShippingMethods: (...args: any[]) => Promise<any[]>
+  retrieveOrderShippingMethod: (...args: any[]) => Promise<any>
+  createOrderChange_: (...args: any[]) => Promise<any>
+}
+
+function createReturnReference(
+  em: EntityManagerLike,
+  data: OrderTypes.CreateOrderReturnDTO,
+  order: Record<string, any>
+) {
   return em.create(toMikroORMEntity(Return), {
     order_id: data.order_id,
     order_version: order.version,
@@ -26,8 +37,13 @@ function createReturnReference(em, data, order) {
   })
 }
 
-function createReturnItems(em, data, returnRef, actions) {
-  return data.items.map((item) => {
+function createReturnItems(
+  em: EntityManagerLike,
+  data: OrderTypes.CreateOrderReturnDTO,
+  returnRef: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[]
+) {
+  return (data.items ?? []).map((item: Record<string, any>) => {
     actions.push({
       action: ChangeActionType.RETURN_ITEM,
       return_id: returnRef.id,
@@ -53,11 +69,11 @@ function createReturnItems(em, data, returnRef, actions) {
 }
 
 async function processShippingMethod(
-  service,
-  data,
-  returnRef,
-  actions,
-  sharedContext
+  service: ReturnService,
+  data: OrderTypes.CreateOrderReturnDTO,
+  returnRef: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   let shippingMethodId
 
@@ -106,11 +122,11 @@ async function processShippingMethod(
 }
 
 async function createOrderChange(
-  service,
-  data,
-  returnRef,
-  actions,
-  sharedContext
+  service: ReturnService,
+  data: OrderTypes.CreateOrderReturnDTO,
+  returnRef: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   return await service.createOrderChange_(
     {

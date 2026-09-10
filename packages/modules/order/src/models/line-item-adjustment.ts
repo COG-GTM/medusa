@@ -1,4 +1,8 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 import { OrderLineItem } from "./line-item"
 
 const _OrderLineItemAdjustment = model
@@ -23,4 +27,11 @@ const _OrderLineItemAdjustment = model
     },
   ])
 
-export const OrderLineItemAdjustment = _OrderLineItemAdjustment
+interface OrderLineItemAdjustmentModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderLineItemAdjustment)["schema"]>,
+    "OrderLineItemAdjustment"
+  > {}
+
+export const OrderLineItemAdjustment: OrderLineItemAdjustmentModel =
+  _OrderLineItemAdjustment

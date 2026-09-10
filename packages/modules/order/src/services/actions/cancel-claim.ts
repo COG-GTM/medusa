@@ -7,11 +7,11 @@ import {
 import { ChangeActionType, promiseAll } from "@medusajs/framework/utils"
 
 async function createOrderChange(
-  service,
-  data,
-  claimOrder,
-  actions,
-  sharedContext
+  service: { createOrderChange_: (...args: any[]) => Promise<any> },
+  data: OrderTypes.CancelOrderClaimDTO,
+  claimOrder: OrderClaimDTO,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   return await service.createOrderChange_(
     {

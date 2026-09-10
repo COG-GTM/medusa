@@ -1,4 +1,8 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 import { OrderClaimItem } from "./claim-item"
 
 const _OrderClaimItemImage = model
@@ -28,4 +32,11 @@ const _OrderClaimItemImage = model
     },
   ])
 
-export const OrderClaimItemImage = _OrderClaimItemImage
+interface OrderClaimItemImageModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderClaimItemImage)["schema"]>,
+    "OrderClaimItemImage"
+  > {}
+
+export const OrderClaimItemImage: OrderClaimItemImageModel =
+  _OrderClaimItemImage

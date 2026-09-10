@@ -14,7 +14,22 @@ import {
 } from "@medusajs/framework/utils"
 import { OrderExchange, OrderExchangeItem, Return, ReturnItem } from "@models"
 
-function createExchangeAndReturnEntities(em, data, order) {
+type EntityManagerLike = { create: (entity: any, data: any) => any }
+type CreateExchangeData = OrderTypes.CreateOrderExchangeDTO & {
+  refund_amount?: unknown
+  return_items?: Record<string, any>[]
+}
+type ExchangeService = {
+  orderLineItemService_: { create: (...args: any[]) => Promise<any[]> }
+  createOrderShippingMethods: (...args: any[]) => Promise<any[]>
+  retrieveOrderShippingMethod: (...args: any[]) => Promise<any>
+}
+
+function createExchangeAndReturnEntities(
+  em: EntityManagerLike,
+  data: CreateExchangeData,
+  order: Record<string, any>
+) {
   const exchangeReference = em.create(toMikroORMEntity(OrderExchange), {
     order_id: data.order_id,
     order_version: order.version,
@@ -28,7 +43,7 @@ function createExchangeAndReturnEntities(em, data, order) {
     order_version: order.version,
     status: ReturnStatus.REQUESTED,
     exchange_id: exchangeReference.id,
-    refund_amount: (data.refund_amount as unknown) ?? null,
+    refund_amount: data.refund_amount ?? null,
   })
 
   exchangeReference.return = returnReference
@@ -37,13 +52,13 @@ function createExchangeAndReturnEntities(em, data, order) {
 }
 
 function createReturnItems(
-  em,
-  data,
-  exchangeReference,
-  returnReference,
-  actions
+  em: EntityManagerLike,
+  data: CreateExchangeData,
+  exchangeReference: Record<string, any>,
+  returnReference: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[]
 ) {
-  return data.return_items?.map((item) => {
+  return data.return_items?.map((item: Record<string, any>) => {
     actions.push({
       action: ChangeActionType.RETURN_ITEM,
       reference: "return",
@@ -67,20 +82,20 @@ function createReturnItems(
 }
 
 async function processAdditionalItems(
-  em,
-  service,
-  data,
-  order,
-  exchangeReference,
-  actions,
-  sharedContext
+  em: EntityManagerLike,
+  service: ExchangeService,
+  data: OrderTypes.CreateOrderExchangeDTO,
+  order: Record<string, any>,
+  exchangeReference: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   const itemsToAdd: any[] = []
   const additionalNewItems: any[] = []
   const additionalItems: any[] = []
-  data.additional_items?.forEach((item) => {
+  data.additional_items?.forEach((item: Record<string, any>) => {
     const hasItem = item.id
-      ? order.items.find((o) => o.item.id === item.id)
+      ? order.items.find((o: Record<string, any>) => o.item.id === item.id)
       : false
 
     if (hasItem) {
@@ -127,7 +142,7 @@ async function processAdditionalItems(
     sharedContext
   )
 
-  createItems.forEach((item, index) => {
+  createItems.forEach((item: Record<string, any>, index: number) => {
     const addedItem = itemsToAdd[index]
 
     additionalNewItems[index].item_id = item.id
@@ -152,11 +167,11 @@ async function processAdditionalItems(
 }
 
 async function processShippingMethods(
-  service,
-  data,
-  exchangeReference,
-  actions,
-  sharedContext
+  service: ExchangeService,
+  data: OrderTypes.CreateOrderExchangeDTO,
+  exchangeReference: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   for (const shippingMethod of data.shipping_methods ?? []) {
     let shippingMethodId
@@ -198,12 +213,12 @@ async function processShippingMethods(
 }
 
 async function processReturnShipping(
-  service,
-  data,
-  exchangeReference,
-  returnReference,
-  actions,
-  sharedContext
+  service: ExchangeService,
+  data: OrderTypes.CreateOrderExchangeDTO,
+  exchangeReference: Record<string, any>,
+  returnReference: Record<string, any>,
+  actions: CreateOrderChangeActionDTO[],
+  sharedContext?: Context
 ) {
   let returnShippingMethodId
 

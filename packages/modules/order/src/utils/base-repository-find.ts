@@ -15,6 +15,14 @@ import {
 
 import { mapRepositoryToOrderModel } from "."
 
+type LoadedEntity = Record<string, any>
+
+type ManagerLike = {
+  find: (...args: any[]) => Promise<any[]>
+  getKnex: () => any
+  qb: (...args: any[]) => any
+}
+
 /**
  * The order module replaces MikroORM repository `find`/`findAndCount` with
  * version-aware implementations, so it must apply cross-module join filters
@@ -203,7 +211,9 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
       }
 
       // first relation is always order if the entity is not Order
-      const index = config.options.populate.findIndex((p) => p === "order")
+      const index = config.options.populate.findIndex(
+        (p: string) => p === "order"
+      )
       if (index > -1) {
         config.options.populate.splice(index, 1)
       }
@@ -251,7 +261,9 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
       config.options.populate.push("items.item")
 
       // make sure version is loaded if adjustments are requested
-      if (config.options.fields?.some((f) => f.includes("items.item."))) {
+      if (
+        config.options.fields?.some((f: string) => f.includes("items.item."))
+      ) {
         config.options.fields.push(
           isRelatedEntity ? "order.items.version" : "items.version"
         )
@@ -277,7 +289,7 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
       config.options.populate.push("shipping_methods.shipping_method")
 
       if (
-        config.options.fields?.some((f) =>
+        config.options.fields?.some((f: string) =>
           f.includes("shipping_methods.shipping_method.")
         )
       ) {
@@ -299,7 +311,7 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
       ensureOrderItemFieldsSelection(config, isRelatedEntity)
       ensureOrderShippingMethodFieldsSelection(config, isRelatedEntity)
       MikroOrmBaseRepository.compensateRelationFieldsSelectionFromLoadStrategy({
-        findOptions: config,
+        findOptions: config as DAL.FindOptions<any>,
       })
     }
 
@@ -308,7 +320,7 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
     if (shouldLoadItemAdjustments || shouldLoadShippingAdjustments) {
       const orders = !isRelatedEntity
         ? [...result]
-        : [...result].map((r) => r.order).filter(Boolean)
+        : [...result].map((r: LoadedEntity) => r.order).filter(Boolean)
 
       if (shouldLoadItemAdjustments) {
         await loadItemAdjustments(manager, orders)
@@ -364,7 +376,9 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
         }
       }
 
-      const index = config.options.populate.findIndex((p) => p === "order")
+      const index = config.options.populate.findIndex(
+        (p: string) => p === "order"
+      )
       if (index > -1) {
         config.options.populate.splice(index, 1)
       }
@@ -394,7 +408,9 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
       config.options.populate.push("items.item")
 
       // make sure version is loaded if adjustments are requested
-      if (config.options.fields?.some((f) => f.includes("items.item."))) {
+      if (
+        config.options.fields?.some((f: string) => f.includes("items.item."))
+      ) {
         config.options.fields.push(
           isRelatedEntity ? "order.items.version" : "items.version"
         )
@@ -420,7 +436,7 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
 
       // make sure version is loaded if adjustments are requested
       if (
-        config.options.fields?.some((f) =>
+        config.options.fields?.some((f: string) =>
           f.includes("shipping_methods.shipping_method.")
         )
       ) {
@@ -448,7 +464,7 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
       ensureOrderItemFieldsSelection(config, isRelatedEntity)
       ensureOrderShippingMethodFieldsSelection(config, isRelatedEntity)
       MikroOrmBaseRepository.compensateRelationFieldsSelectionFromLoadStrategy({
-        findOptions: config,
+        findOptions: config as DAL.FindOptions<any>,
       })
     }
 
@@ -466,7 +482,7 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
     if (loadAdjustments || shouldLoadShippingAdjustments) {
       const orders = !isRelatedEntity
         ? [...result]
-        : [...result].map((r) => r.order).filter(Boolean)
+        : [...result].map((r: LoadedEntity) => r.order).filter(Boolean)
 
       if (loadAdjustments) {
         await loadItemAdjustments(manager, orders)
@@ -485,15 +501,18 @@ export function setFindMethods<T>(klass: Constructor<T>, entity: any) {
  * @param manager MikroORM manager
  * @param orders Orders to load adjustments for
  */
-async function loadItemAdjustments(manager, orders) {
-  const items = orders.flatMap((r) => [...(r.items ?? [])])
+async function loadItemAdjustments(
+  manager: ManagerLike,
+  orders: LoadedEntity[]
+) {
+  const items = orders.flatMap((r) => [...(r.items ?? [])]) as LoadedEntity[]
   const itemsIdMap = new Map<string, any>(items.map((i) => [i.item.id, i.item]))
 
   if (!items.length) {
     return
   }
 
-  const params = items.map((i) => {
+  const params = items.map((i: LoadedEntity) => {
     // preinitialise all items so an empty array is returned for ones without adjustments
     if (!i.item.adjustments.isInitialized()) {
       i.item.adjustments.initialized = true
@@ -525,8 +544,13 @@ async function loadItemAdjustments(manager, orders) {
  * @param manager MikroORM manager
  * @param orders Orders to load adjustments for
  */
-async function loadShippingAdjustments(manager, orders) {
-  const shippingMethods = orders.flatMap((r) => [...(r.shipping_methods ?? [])])
+async function loadShippingAdjustments(
+  manager: ManagerLike,
+  orders: LoadedEntity[]
+) {
+  const shippingMethods = orders.flatMap((r) => [
+    ...(r.shipping_methods ?? []),
+  ]) as LoadedEntity[]
   const shippingMethodsIdMap = new Map<string, any>(
     shippingMethods.map((s) => [s.shipping_method.id, s.shipping_method])
   )
@@ -535,7 +559,7 @@ async function loadShippingAdjustments(manager, orders) {
     return
   }
 
-  const params = shippingMethods.map((s) => {
+  const params = shippingMethods.map((s: LoadedEntity) => {
     // preinitialise all shipping methods so an empty array is returned for ones without adjustments
     if (!s.shipping_method.adjustments.isInitialized()) {
       s.shipping_method.adjustments.initialized = true
@@ -564,7 +588,11 @@ async function loadShippingAdjustments(manager, orders) {
   }
 }
 
-function getVersionSubQuery(manager, alias, field = "order_id") {
+function getVersionSubQuery(
+  manager: ManagerLike,
+  alias: string,
+  field = "order_id"
+) {
   const knex = manager.getKnex()
   const sql = manager
     .qb(toMikroORMEntity(Order), "_sub0")
@@ -581,12 +609,12 @@ function configurePopulateWhere(
   isRelatedEntity: boolean,
   version: any,
   isSelectIn = false,
-  manager?
+  manager?: ManagerLike
 ) {
   const requestedPopulate = config.options?.populate ?? []
   const hasRelation = (relation: string) =>
     requestedPopulate.some(
-      (p) => p === relation || p.startsWith(`${relation}.`)
+      (p: string) => p === relation || p.startsWith(`${relation}.`)
     )
 
   config.options.populateWhere ??= {}
@@ -656,7 +684,7 @@ function configurePopulateWhere(
     return
   }
 
-  if (isSelectIn) {
+  if (isSelectIn && manager) {
     version = getVersionSubQuery(manager, "o0")
   }
 

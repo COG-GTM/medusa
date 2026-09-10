@@ -1,4 +1,8 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 import { OrderShippingMethod } from "./shipping-method"
 
 const _OrderShippingMethodAdjustment = model
@@ -38,9 +42,19 @@ const _OrderShippingMethodAdjustment = model
   ])
 
 /**
- * The Order Shipping Method Adjustment data model. This model represents adjustments applied to 
+ * The Order Shipping Method Adjustment data model. This model represents adjustments applied to
  * order shipping methods, such as promotions or discounts.
  *
  * @since 2.13.7
  */
-export const OrderShippingMethodAdjustment = _OrderShippingMethodAdjustment
+interface OrderShippingMethodAdjustmentModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderShippingMethodAdjustment)["schema"]>,
+    {
+      tableName: "order_shipping_method_adjustment"
+      name: "OrderShippingMethodAdjustment"
+    }
+  > {}
+
+export const OrderShippingMethodAdjustment: OrderShippingMethodAdjustmentModel =
+  _OrderShippingMethodAdjustment

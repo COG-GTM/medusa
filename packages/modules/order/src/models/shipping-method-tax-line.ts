@@ -1,4 +1,8 @@
-import { model } from "@medusajs/framework/utils"
+import {
+  DmlEntity,
+  DMLEntitySchemaBuilder,
+  model,
+} from "@medusajs/framework/utils"
 import { OrderShippingMethod } from "./shipping-method"
 
 const _OrderShippingMethodTaxLine = model
@@ -32,4 +36,14 @@ const _OrderShippingMethodTaxLine = model
     },
   ])
 
-export const OrderShippingMethodTaxLine = _OrderShippingMethodTaxLine
+interface OrderShippingMethodTaxLineModel
+  extends DmlEntity<
+    DMLEntitySchemaBuilder<(typeof _OrderShippingMethodTaxLine)["schema"]>,
+    {
+      tableName: "order_shipping_method_tax_line"
+      name: "OrderShippingMethodTaxLine"
+    }
+  > {}
+
+export const OrderShippingMethodTaxLine: OrderShippingMethodTaxLineModel =
+  _OrderShippingMethodTaxLine
