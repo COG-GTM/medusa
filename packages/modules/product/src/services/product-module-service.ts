@@ -694,7 +694,7 @@ export default class ProductModuleService
 
     const result = [...created, ...updated]
     const allVariants = await this.baseRepository_.serialize<
-      ProductTypes.ProductVariantDTO[] | ProductTypes.ProductVariantDTO
+      ProductTypes.ProductVariantDTO[]
     >(result)
 
     return Array.isArray(data) ? allVariants : allVariants[0]
@@ -1028,7 +1028,7 @@ export default class ProductModuleService
     const types = await this.upsertProductTypes_(data, sharedContext)
 
     const result = await this.baseRepository_.serialize<
-      ProductTypes.ProductTypeDTO[] | ProductTypes.ProductTypeDTO
+      ProductTypes.ProductTypeDTO[]
     >(types)
 
     return Array.isArray(data) ? result : result[0]
@@ -1212,7 +1212,7 @@ export default class ProductModuleService
 
     const result = [...created, ...updated]
     const allOptions = await this.baseRepository_.serialize<
-      ProductTypes.ProductOptionDTO[] | ProductTypes.ProductOptionDTO
+      ProductTypes.ProductOptionDTO[]
     >(result)
 
     return Array.isArray(data) ? allOptions : allOptions[0]
@@ -2416,13 +2416,13 @@ export default class ProductModuleService
       const input = normalizedInput.find((c) => c.id === collectionData.id)
       const productsToUpdate = (input as any)?.products
 
-      const dissociateSelector = {
+      const dissociateSelector: ProductTypes.FilterableProductProps = {
         collection_id: collectionData.id,
       }
-      const associateSelector = {}
+      const associateSelector: ProductTypes.FilterableProductProps = {}
 
       if (isDefined(productsToUpdate)) {
-        const productIds = productsToUpdate.map((p) => p.id)
+        const productIds = productsToUpdate.map((p: { id: string }) => p.id)
 
         dissociateSelector["id"] = { $nin: productIds }
         associateSelector["id"] = { $in: productIds }
@@ -2770,7 +2770,7 @@ export default class ProductModuleService
 
     const result = [...created, ...updated]
     const allProducts = await this.baseRepository_.serialize<
-      ProductTypes.ProductDTO[] | ProductTypes.ProductDTO
+      ProductTypes.ProductDTO[]
     >(result)
 
     return Array.isArray(data) ? allProducts : allProducts[0]
@@ -3393,7 +3393,7 @@ export default class ProductModuleService
         ;(productData as any).options = productData.options?.map((option) => {
           return {
             title: (option as any).title,
-            values: (option as any).values?.map((value) => {
+            values: (option as any).values?.map((value: string) => {
               return {
                 value: value,
               }
@@ -3464,7 +3464,7 @@ export default class ProductModuleService
       }
 
       if (productData.tag_ids) {
-        ;(productData as any).tags = productData.tag_ids.map((cid) => ({
+        ;(productData as any).tags = productData.tag_ids.map((cid: string) => ({
           id: cid,
         }))
         delete productData.tag_ids
@@ -3472,7 +3472,7 @@ export default class ProductModuleService
 
       if (productData.category_ids) {
         ;(productData as any).categories = productData.category_ids.map(
-          (cid) => ({
+          (cid: string) => ({
             id: cid,
           })
         )
