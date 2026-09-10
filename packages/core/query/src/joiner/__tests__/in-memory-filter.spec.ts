@@ -184,6 +184,19 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
       )
     })
 
+    it("matches wildcard heavy $like patterns in bounded time", () => {
+      const start = Date.now()
+
+      expect(
+        matchesFilters(
+          { title: "a".repeat(2000) },
+          { title: { $like: "%".repeat(40) + "z" } }
+        )
+      ).toBe(false)
+
+      expect(Date.now() - start).toBeLessThan(1000)
+    })
+
     it("evaluates $ilike case-insensitively", () => {
       expect(matchesFilters(record, { title: { $ilike: "winter%" } })).toBe(
         true

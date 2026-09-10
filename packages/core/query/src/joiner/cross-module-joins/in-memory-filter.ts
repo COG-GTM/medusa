@@ -244,15 +244,48 @@ function likeMatches(
     return false
   }
 
-  const source =
-    "^" +
-    pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/%/g, "[\\s\\S]*")
-      .replace(/_/g, ".") +
-    "$"
+  const subject = caseInsensitive ? String(value).toLowerCase() : String(value)
+  const template = caseInsensitive ? pattern.toLowerCase() : pattern
 
-  return new RegExp(source, caseInsensitive ? "i" : "").test(String(value))
+  return wildcardMatches(subject, template)
+}
+
+/**
+ * Matches a SQL LIKE pattern (`%` for any sequence, `_` for a single
+ * character) against a subject in linear time, backtracking at most once per
+ * wildcard.
+ */
+function wildcardMatches(subject: string, pattern: string): boolean {
+  let subjectIdx = 0
+  let patternIdx = 0
+  let lastWildcardIdx = -1
+  let resumeIdx = 0
+
+  while (subjectIdx < subject.length) {
+    const patternChar = pattern[patternIdx]
+
+    if (patternChar === "%") {
+      lastWildcardIdx = patternIdx++
+      resumeIdx = subjectIdx
+    } else if (
+      patternIdx < pattern.length &&
+      (patternChar === "_" || patternChar === subject[subjectIdx])
+    ) {
+      patternIdx++
+      subjectIdx++
+    } else if (lastWildcardIdx !== -1) {
+      patternIdx = lastWildcardIdx + 1
+      subjectIdx = ++resumeIdx
+    } else {
+      return false
+    }
+  }
+
+  while (pattern[patternIdx] === "%") {
+    patternIdx++
+  }
+
+  return patternIdx === pattern.length
 }
 
 function toTime(value: unknown): number | null {
