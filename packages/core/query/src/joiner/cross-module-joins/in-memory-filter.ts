@@ -189,14 +189,19 @@ function equals(value: unknown, expected: unknown): boolean {
   }
 
   if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((entry, idx) => equals(entry, b[idx]))
+    return (
+      a.length === b.length && a.every((entry, idx) => equals(entry, b[idx]))
+    )
   }
 
   return a === b
 }
 
 /** Three-way comparison; null when the values are not comparable. */
-export function compareValues(value: unknown, expected: unknown): number | null {
+export function compareValues(
+  value: unknown,
+  expected: unknown
+): number | null {
   if (value == null || expected == null) {
     return null
   }
@@ -244,15 +249,70 @@ function likeMatches(
     return false
   }
 
-  const source =
-    "^" +
-    pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/%/g, "[\\s\\S]*")
-      .replace(/_/g, ".") +
-    "$"
+  return wildcardMatches(
+    Array.from(String(value)),
+    Array.from(pattern),
+    caseInsensitive
+  )
+}
 
-  return new RegExp(source, caseInsensitive ? "i" : "").test(String(value))
+function charMatches(
+  subjectChar: string,
+  patternChar: string,
+  caseInsensitive: boolean
+): boolean {
+  if (subjectChar === patternChar) {
+    return true
+  }
+
+  return (
+    caseInsensitive && subjectChar.toLowerCase() === patternChar.toLowerCase()
+  )
+}
+
+/**
+ * Matches a SQL LIKE pattern (`%` for any sequence, `_` for a single
+ * character) against a subject without compiling a regular expression.
+ * Characters are compared one code point at a time, so `_` consumes exactly one
+ * character, and the greedy `%` handling backtracks to the last wildcard only,
+ * bounding the run at O(subject * pattern) with no catastrophic backtracking.
+ */
+function wildcardMatches(
+  subject: string[],
+  pattern: string[],
+  caseInsensitive: boolean
+): boolean {
+  let subjectIdx = 0
+  let patternIdx = 0
+  let lastWildcardIdx = -1
+  let resumeIdx = 0
+
+  while (subjectIdx < subject.length) {
+    const patternChar = pattern[patternIdx]
+
+    if (patternChar === "%") {
+      lastWildcardIdx = patternIdx++
+      resumeIdx = subjectIdx
+    } else if (
+      patternIdx < pattern.length &&
+      (patternChar === "_" ||
+        charMatches(subject[subjectIdx], patternChar, caseInsensitive))
+    ) {
+      patternIdx++
+      subjectIdx++
+    } else if (lastWildcardIdx !== -1) {
+      patternIdx = lastWildcardIdx + 1
+      subjectIdx = ++resumeIdx
+    } else {
+      return false
+    }
+  }
+
+  while (pattern[patternIdx] === "%") {
+    patternIdx++
+  }
+
+  return patternIdx === pattern.length
 }
 
 function toTime(value: unknown): number | null {

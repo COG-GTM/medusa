@@ -168,9 +168,9 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
         false
       )
       expect(matchesFilters(record, { title: { $like: "%Jack%" } })).toBe(true)
-      expect(matchesFilters(record, { title: { $like: "Winter Jacke_" } })).toBe(
-        true
-      )
+      expect(
+        matchesFilters(record, { title: { $like: "Winter Jacke_" } })
+      ).toBe(true)
       expect(matchesFilters(record, { title: { $like: "Winter" } })).toBe(false)
     })
 
@@ -184,6 +184,19 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
       )
     })
 
+    it("matches wildcard heavy $like patterns in bounded time", () => {
+      const start = Date.now()
+
+      expect(
+        matchesFilters(
+          { title: "a".repeat(2000) },
+          { title: { $like: "%".repeat(40) + "z" } }
+        )
+      ).toBe(false)
+
+      expect(Date.now() - start).toBeLessThan(1000)
+    })
+
     it("evaluates $ilike case-insensitively", () => {
       expect(matchesFilters(record, { title: { $ilike: "winter%" } })).toBe(
         true
@@ -194,6 +207,18 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
       expect(matchesFilters(record, { title: { $ilike: "summer%" } })).toBe(
         false
       )
+    })
+
+    it("matches $ilike wildcards per character on case folds that expand", () => {
+      expect(matchesFilters({ title: "İ" }, { title: { $ilike: "_" } })).toBe(
+        true
+      )
+      expect(matchesFilters({ title: "İ" }, { title: { $ilike: "__" } })).toBe(
+        false
+      )
+      expect(
+        matchesFilters({ title: "Straße" }, { title: { $ilike: "______" } })
+      ).toBe(true)
     })
 
     it("evaluates $re as a regular expression", () => {
@@ -228,9 +253,9 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
     const record = { tags: ["sale", "new", "featured"] }
 
     it("evaluates $overlap, $contains, and $contained", () => {
-      expect(matchesFilters(record, { tags: { $overlap: ["sale", "x"] } })).toBe(
-        true
-      )
+      expect(
+        matchesFilters(record, { tags: { $overlap: ["sale", "x"] } })
+      ).toBe(true)
       expect(matchesFilters(record, { tags: { $overlap: ["x", "y"] } })).toBe(
         false
       )
@@ -269,9 +294,13 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
 
   describe("$is and $exists", () => {
     it("evaluates $is against null and scalars", () => {
-      expect(matchesFilters({ deleted_at: null }, { deleted_at: { $is: null } })).toBe(true)
+      expect(
+        matchesFilters({ deleted_at: null }, { deleted_at: { $is: null } })
+      ).toBe(true)
       expect(matchesFilters({}, { deleted_at: { $is: null } })).toBe(true)
-      expect(matchesFilters({ deleted_at: "x" }, { deleted_at: { $is: null } })).toBe(false)
+      expect(
+        matchesFilters({ deleted_at: "x" }, { deleted_at: { $is: null } })
+      ).toBe(false)
       expect(matchesFilters({ active: true }, { active: { $is: true } })).toBe(
         true
       )
@@ -348,12 +377,12 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
           amount: { $and: [{ $gt: 50 }, { $lt: 90 }] },
         })
       ).toBe(false)
-      expect(
-        matchesFilters(record, { title: { $not: { $like: "P%" } } })
-      ).toBe(true)
-      expect(
-        matchesFilters(record, { title: { $not: { $like: "S%" } } })
-      ).toBe(false)
+      expect(matchesFilters(record, { title: { $not: { $like: "P%" } } })).toBe(
+        true
+      )
+      expect(matchesFilters(record, { title: { $not: { $like: "S%" } } })).toBe(
+        false
+      )
     })
   })
 
@@ -378,12 +407,12 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
     })
 
     it("applies EXISTS semantics on to-many relations", () => {
-      expect(
-        matchesFilters(record, { prices: { amount: { $gt: 50 } } })
-      ).toBe(true)
-      expect(
-        matchesFilters(record, { prices: { amount: { $gt: 500 } } })
-      ).toBe(false)
+      expect(matchesFilters(record, { prices: { amount: { $gt: 50 } } })).toBe(
+        true
+      )
+      expect(matchesFilters(record, { prices: { amount: { $gt: 500 } } })).toBe(
+        false
+      )
     })
 
     it("requires a single related record to satisfy all its conditions", () => {
@@ -406,7 +435,10 @@ describe("matchesFilters (stage 2 in-memory cross-module filtering)", () => {
         matchesFilters({ id: "1" }, { product: { handle: "shirt" } })
       ).toBe(false)
       expect(
-        matchesFilters({ id: "1", product: null }, { product: { handle: "shirt" } })
+        matchesFilters(
+          { id: "1", product: null },
+          { product: { handle: "shirt" } }
+        )
       ).toBe(false)
       expect(
         matchesFilters({ id: "1", prices: [] }, { prices: { amount: 10 } })
