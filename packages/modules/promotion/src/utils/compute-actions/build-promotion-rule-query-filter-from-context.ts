@@ -84,7 +84,7 @@ export async function buildPromotionRuleQueryFilterFromContext(
     )
 
     const dbAvailableAttributes = new Set(
-      rows.map(({ attribute }) => attribute)
+      rows.map(({ attribute }: { attribute: string }) => attribute)
     )
 
     // update the attribute in the map to remove the one that are not in the db
