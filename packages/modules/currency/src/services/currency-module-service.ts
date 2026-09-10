@@ -106,12 +106,12 @@ const normalizeFilterable = <TModel, TFilter extends BaseFilterable<TFilter>>(
   const normalizedFilters = {} as TFilter
   for (const key in filters) {
     if (key === "$and" || key === "$or") {
-      normalizedFilters[key] = (filters[key] as any).map((filter) =>
+      normalizedFilters[key] = (filters[key] as any).map((filter: TFilter) =>
         normalizeFilterable(filter, normalizer)
       )
     } else if (filters[key] !== undefined) {
       if (Array.isArray(filters[key])) {
-        normalizedFilters[key] = (filters[key] as any).map((val) =>
+        normalizedFilters[key] = (filters[key] as any).map((val: unknown) =>
           normalizer(key as any, val)
         )
       } else {
