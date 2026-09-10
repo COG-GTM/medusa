@@ -42,4 +42,25 @@ describe("unflattenWhereClauses", () => {
       created_at: "ASC",
     })
   })
+
+  it("should not pollute the object prototype through unsafe path segments", () => {
+    const where = JSON.parse(
+      `{"__proto__.polluted": "yes", "constructor.prototype.polluted": "yes", "a.__proto__.polluted": "yes"}`
+    )
+
+    const result = unflattenObjectKeys(where)
+
+    expect(result).toEqual({})
+    expect(({} as any).polluted).toBeUndefined()
+    expect((Object.prototype as any).polluted).toBeUndefined()
+  })
+
+  it("should drop unsafe top level keys", () => {
+    const where = JSON.parse(`{"__proto__": {"polluted": "yes"}}`)
+
+    const result = unflattenObjectKeys(where)
+
+    expect(result).toEqual({})
+    expect(({} as any).polluted).toBeUndefined()
+  })
 })
