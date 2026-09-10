@@ -189,6 +189,15 @@ When you disable `rejectUnauthorized`, make sure to also add `?ssl_mode=disable`
 
 </Note>
 
+#### Certificate Verification
+
+When you connect to a remote database and don't set `databaseDriverOptions`, Medusa verifies the database's TLS certificate. Use one of the following options to connect to a database that presents a self-signed or otherwise unverifiable certificate:
+
+- Add the `sslmode=no-verify` query parameter to the [databaseUrl](#databaseUrl).
+- Set the `MEDUSA_DATABASE_SSL_REJECT_UNAUTHORIZED` environment variable to `false`.
+
+Both options turn off certificate verification for remote connections, which exposes the connection to man-in-the-middle attacks. Prefer installing the database's certificate authority instead.
+
 #### AWS RDS IAM Database Authentication
 
 To use a dynamic password (for example, with AWS RDS IAM authentication), pass a `dynamicPassword` function that returns a fresh token for each new connection:

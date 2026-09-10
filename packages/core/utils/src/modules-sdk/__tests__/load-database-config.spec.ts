@@ -5,6 +5,7 @@ describe("loadDatabaseConfig", function () {
     delete process.env.DATABASE_URL
     delete process.env.MEDUSA_DATABASE_URL
     delete process.env.PRODUCT_DATABASE_URL
+    delete process.env.MEDUSA_DATABASE_SSL_REJECT_UNAUTHORIZED
   })
 
   it("should return the local configuration using the environment variable respecting their precedence", function () {
@@ -63,7 +64,7 @@ describe("loadDatabaseConfig", function () {
       driverOptions: {
         connection: {
           ssl: {
-            rejectUnauthorized: false,
+            rejectUnauthorized: true,
           },
         },
       },
@@ -80,7 +81,7 @@ describe("loadDatabaseConfig", function () {
       driverOptions: {
         connection: {
           ssl: {
-            rejectUnauthorized: false,
+            rejectUnauthorized: true,
           },
         },
       },
@@ -148,12 +149,69 @@ describe("loadDatabaseConfig", function () {
       driverOptions: {
         connection: {
           ssl: {
-            rejectUnauthorized: false,
+            rejectUnauthorized: true,
           },
         },
       },
       debug: false,
       schema: "",
+    })
+  })
+
+  it("should skip certificate verification when the client url opts out", function () {
+    const options = {
+      database: {
+        clientUrl:
+          "postgres://https://test.com:5432/medusa-test?sslmode=no-verify",
+      },
+    }
+
+    const config = loadDatabaseConfig("product", options)
+
+    expect(config.driverOptions).toEqual({
+      connection: {
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      },
+    })
+  })
+
+  it("should keep certificate verification when no-verify only appears outside the query parameters", function () {
+    const options = {
+      database: {
+        clientUrl:
+          "postgres://user:sslmode=no-verify@test.com:5432/sslmode=no-verify",
+      },
+    }
+
+    const config = loadDatabaseConfig("product", options)
+
+    expect(config.driverOptions).toEqual({
+      connection: {
+        ssl: {
+          rejectUnauthorized: true,
+        },
+      },
+    })
+  })
+
+  it("should skip certificate verification when the environment opts out", function () {
+    process.env.MEDUSA_DATABASE_SSL_REJECT_UNAUTHORIZED = "false"
+    const options = {
+      database: {
+        clientUrl: "postgres://https://test.com:5432/medusa-test",
+      },
+    }
+
+    const config = loadDatabaseConfig("product", options)
+
+    expect(config.driverOptions).toEqual({
+      connection: {
+        ssl: {
+          rejectUnauthorized: false,
+        },
+      },
     })
   })
 
