@@ -15,6 +15,19 @@ function isModuleServiceInitializeOptions(
   return !!(obj as any)?.database
 }
 
+/**
+ * Certificate verification is only skipped when the deployment opts out of it,
+ * either with `sslmode=no-verify`/`ssl_mode=no-verify` in the connection string
+ * or with MEDUSA_DATABASE_SSL_REJECT_UNAUTHORIZED=false.
+ */
+function shouldRejectUnauthorized(clientUrl: string): boolean {
+  if (/(ssl_mode|sslmode)=no-verify/i.test(clientUrl)) {
+    return false
+  }
+
+  return process.env.MEDUSA_DATABASE_SSL_REJECT_UNAUTHORIZED !== "false"
+}
+
 function getDefaultDriverOptions(clientUrl: string) {
   const localOptions = {
     connection: {
@@ -25,7 +38,7 @@ function getDefaultDriverOptions(clientUrl: string) {
   const remoteOptions = {
     connection: {
       ssl: {
-        rejectUnauthorized: false,
+        rejectUnauthorized: shouldRejectUnauthorized(clientUrl),
       },
     },
   }
