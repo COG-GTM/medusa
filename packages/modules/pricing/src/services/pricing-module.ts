@@ -153,10 +153,10 @@ export default class PricingModuleService
   }
 
   private setupCalculatedPriceConfig_(
-    filters,
-    config
+    filters: Record<string, any>,
+    config: FindConfig<any>
   ): PricingContext["context"] | undefined {
-    const fieldIdx = config.relations?.indexOf("calculated_price")
+    const fieldIdx = config.relations?.indexOf("calculated_price") ?? -1
     const shouldCalculatePrice = fieldIdx > -1
 
     const pricingContext = filters.context ?? {}
@@ -1279,7 +1279,7 @@ export default class PricingModuleService
     )
 
     const pricePreferences = await this.baseRepository_.serialize<
-      PricePreferenceDTO[] | PricePreferenceDTO
+      PricePreferenceDTO[]
     >(updateResult)
 
     return isString(idOrSelector) ? pricePreferences[0] : pricePreferences
@@ -1655,14 +1655,14 @@ export default class PricingModuleService
       sharedContext
     )
 
-    const rulesMap = new Map()
+    const rulesMap = new Map<string, [string, any][]>()
     data.forEach((rule) => {
       if (!rulesMap.has(rule.price_list_id)) {
         rulesMap.set(rule.price_list_id, [])
       }
 
       Object.entries(rule.rules).forEach(([key, value]) => {
-        rulesMap.get(rule.price_list_id).push([key, value])
+        rulesMap.get(rule.price_list_id)!.push([key, value])
       })
     })
 
@@ -1719,14 +1719,14 @@ export default class PricingModuleService
       sharedContext
     )
 
-    const rulesMap = new Map()
+    const rulesMap = new Map<string, [string, any][]>()
     data.forEach((rule) => {
       if (!rulesMap.has(rule.price_list_id)) {
         rulesMap.set(rule.price_list_id, [])
       }
 
       rule.rules.forEach((key) => {
-        rulesMap.get(rule.price_list_id).push([key, undefined])
+        rulesMap.get(rule.price_list_id)!.push([key, undefined])
       })
     })
 
