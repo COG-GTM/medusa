@@ -246,9 +246,9 @@ export default class RegionModuleService
       sharedContext
     )
 
-    const regions = await this.baseRepository_.serialize<
-      RegionDTO[] | RegionDTO
-    >(updateResult)
+    const regions = await this.baseRepository_.serialize<RegionDTO[]>(
+      updateResult
+    )
 
     return isString(idOrSelector) ? regions[0] : regions
   }
