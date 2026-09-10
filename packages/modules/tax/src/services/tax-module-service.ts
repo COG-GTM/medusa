@@ -104,7 +104,7 @@ export default class TaxModuleService
     const rates = await this.createTaxRates_(input, sharedContext)
 
     const serialized = await this.baseRepository_.serialize<
-      TaxTypes.TaxRateDTO[] | TaxTypes.TaxRateDTO
+      TaxTypes.TaxRateDTO[]
     >(rates)
 
     return Array.isArray(data) ? serialized : serialized[0]
@@ -327,7 +327,7 @@ export default class TaxModuleService
     const result = await this.createTaxRegions_(input, sharedContext)
 
     const serialized = await this.baseRepository_.serialize<
-      TaxTypes.TaxRegionDTO[] | TaxTypes.TaxRegionDTO
+      TaxTypes.TaxRegionDTO[]
     >(result)
 
     return Array.isArray(data) ? serialized : serialized[0]
@@ -389,7 +389,7 @@ export default class TaxModuleService
     const result = await this.createTaxRateRules_(input, sharedContext)
 
     const serialized = await this.baseRepository_.serialize<
-      TaxTypes.TaxRateRuleDTO[] | TaxTypes.TaxRateRuleDTO
+      TaxTypes.TaxRateRuleDTO[]
     >(result)
 
     return Array.isArray(data) ? serialized : serialized[0]
