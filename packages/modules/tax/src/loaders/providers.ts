@@ -1,8 +1,10 @@
 import { moduleProviderLoader } from "@medusajs/framework/modules-sdk"
 
 import {
+  Constructor,
   CreateTaxProviderDTO,
   LoaderOptions,
+  MedusaContainer,
   ModuleProvider,
   ModulesSdkTypes,
 } from "@medusajs/framework/types"
@@ -14,7 +16,14 @@ import TaxProviderService from "../services/tax-provider"
 
 const PROVIDER_REGISTRATION_KEY = "tax_providers" as const
 
-const registrationFn = async (klass, container, pluginOptions) => {
+const registrationFn = async (
+  klass: Constructor<unknown> & {
+    identifier?: string
+    LIFE_TIME?: (typeof Lifetime)[keyof typeof Lifetime]
+  },
+  container: MedusaContainer,
+  pluginOptions: { id?: string; options?: Record<string, unknown> }
+) => {
   if (!klass?.identifier) {
     throw new MedusaError(
       MedusaError.Types.INVALID_ARGUMENT,

@@ -23,7 +23,7 @@ export default class TaxProviderService extends ModulesSdkUtils.MedusaInternalSe
 
   retrieveProvider(providerId: string): ITaxProvider {
     try {
-      return this.__container__[providerId] as ITaxProvider
+      return (this.__container__ as Record<string, ITaxProvider>)[providerId]
     } catch (err) {
       if (err.name === "AwilixResolutionError") {
         const errMessage = `
