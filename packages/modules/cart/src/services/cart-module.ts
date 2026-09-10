@@ -170,7 +170,10 @@ export default class CartModuleService
     return includeTotals
   }
 
-  private addRelationsToCalculateTotals(config: FindConfig<any>, totalFields) {
+  private addRelationsToCalculateTotals(
+    config: FindConfig<any>,
+    totalFields: string[]
+  ) {
     config.relations ??= []
 
     const requiredFieldsForTotals = [
@@ -191,7 +194,7 @@ export default class CartModuleService
       return (
         !requiredFieldsForTotals.some((val) =>
           (field as string).startsWith(val)
-        ) && !totalFields.includes(field)
+        ) && !totalFields.includes(field as string)
       )
     })
   }
