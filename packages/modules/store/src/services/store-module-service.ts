@@ -184,9 +184,9 @@ export default class StoreModuleService
 
     const updateResult = await this.update_(normalizedInput, sharedContext)
 
-    const stores = await this.baseRepository_.serialize<
-      StoreTypes.StoreDTO[] | StoreTypes.StoreDTO
-    >(updateResult)
+    const stores = await this.baseRepository_.serialize<StoreTypes.StoreDTO[]>(
+      updateResult
+    )
 
     return isString(idOrSelector) ? stores[0] : stores
   }
