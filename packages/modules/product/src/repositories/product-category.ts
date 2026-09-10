@@ -14,6 +14,21 @@ import { SqlEntityManager } from "@medusajs/framework/mikro-orm/postgresql"
 import { ProductCategory } from "@models"
 import { UpdateCategoryInput } from "@types"
 
+const assignDefinedProperties = (
+  target: InferEntityType<typeof ProductCategory>,
+  source: Partial<InferEntityType<typeof ProductCategory>>
+) => {
+  const target_ = target as Record<string, unknown>
+
+  for (const key of Object.keys(source) as (keyof typeof source)[]) {
+    const value = source[key]
+
+    if (isDefined(value)) {
+      target_[key] = value
+    }
+  }
+}
+
 // eslint-disable-next-line max-len
 export class ProductCategoryRepository extends DALUtils.MikroOrmBaseTreeRepository<
   typeof ProductCategory
@@ -212,38 +227,44 @@ export class ProductCategoryRepository extends DALUtils.MikroOrmBaseTreeReposito
       }
     })
 
-    const populateChildren = (category, level = 0) => {
+    const populateChildren = (
+      category: InferEntityType<typeof ProductCategory>,
+      level = 0
+    ) => {
+      const category_ = category as Partial<
+        InferEntityType<typeof ProductCategory>
+      >
       const categories = categoriesInTree.filter(
         (child) => child.parent_category_id === category.id
       )
 
       if (include.descendants) {
         category.category_children = categories.map((child) => {
-          return populateChildren(categoriesById.get(child.id), level + 1)
+          return populateChildren(categoriesById.get(child.id)!, level + 1)
         })
       }
 
       if (level === 0) {
         if (!include.ancestors && !shouldPopulateParent) {
-          delete category.parent_category
+          delete category_.parent_category
         }
 
         return category
       }
 
       if (include.ancestors) {
-        delete category.category_children
+        delete category_.category_children
       }
 
       if (include.descendants) {
-        delete category.parent_category
+        delete category_.parent_category
       }
 
       return category
     }
 
     const populatedProductCategories = productCategories.map((cat) => {
-      const fullCategory = categoriesById.get(cat.id)
+      const fullCategory = categoriesById.get(cat.id)!
       return populateChildren(fullCategory)
     })
 
@@ -483,11 +504,7 @@ export class ProductCategoryRepository extends DALUtils.MikroOrmBaseTreeReposito
           !isDefined(categoryData.parent_category_id) &&
           !isDefined(categoryData.rank)
         ) {
-          for (const key in categoryData) {
-            if (isDefined(categoryData[key])) {
-              productCategory[key] = categoryData[key]
-            }
-          }
+          assignDefinedProperties(productCategory, categoryData)
 
           manager.assign(productCategory, categoryData)
           return productCategory
@@ -580,11 +597,7 @@ export class ProductCategoryRepository extends DALUtils.MikroOrmBaseTreeReposito
           // Rerank the old parent's siblings
           await this.rerankSiblingsAfterDeletion(manager, productCategory)
 
-          for (const key in categoryData) {
-            if (isDefined(categoryData[key])) {
-              productCategory[key] = categoryData[key]
-            }
-          }
+          assignDefinedProperties(productCategory, categoryData)
 
           manager.assign(productCategory, categoryData)
           return productCategory
@@ -608,11 +621,7 @@ export class ProductCategoryRepository extends DALUtils.MikroOrmBaseTreeReposito
           )
         }
 
-        for (const key in categoryData) {
-          if (isDefined(categoryData[key])) {
-            productCategory[key] = categoryData[key]
-          }
-        }
+        assignDefinedProperties(productCategory, categoryData)
 
         manager.assign(productCategory, categoryData)
         return productCategory

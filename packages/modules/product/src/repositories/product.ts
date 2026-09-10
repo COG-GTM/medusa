@@ -477,7 +477,7 @@ export class ProductRepository extends DALUtils.mikroOrmBaseRepositoryFactory(
       .whereIn("product_id", productIds)
       .whereNull("deleted_at")
 
-    rows.forEach((row) => {
+    rows.forEach((row: { product_id: string; product_option_id: string }) => {
       if (!optionIdsByProduct.has(row.product_id)) {
         optionIdsByProduct.set(row.product_id, new Set())
       }
@@ -512,14 +512,16 @@ export class ProductRepository extends DALUtils.mikroOrmBaseRepositoryFactory(
       .whereIn("ppo.product_id", productIds)
       .whereNull("ppov.deleted_at")
 
-    rows.forEach((row) => {
-      if (!allowedValueIdsByProduct.has(row.product_id)) {
-        allowedValueIdsByProduct.set(row.product_id, new Set())
+    rows.forEach(
+      (row: { product_id: string; product_option_value_id: string }) => {
+        if (!allowedValueIdsByProduct.has(row.product_id)) {
+          allowedValueIdsByProduct.set(row.product_id, new Set())
+        }
+        allowedValueIdsByProduct
+          .get(row.product_id)!
+          .add(row.product_option_value_id)
       }
-      allowedValueIdsByProduct
-        .get(row.product_id)!
-        .add(row.product_option_value_id)
-    })
+    )
 
     return allowedValueIdsByProduct
   }
