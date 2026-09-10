@@ -37,11 +37,11 @@ import {
 export class SystemPaymentProvider extends AbstractPaymentProvider {
   static identifier = "system"
 
-  async getStatus(_): Promise<string> {
+  async getStatus(_: unknown): Promise<string> {
     return "authorized"
   }
 
-  async getPaymentData(_): Promise<Record<string, unknown>> {
+  async getPaymentData(_: unknown): Promise<Record<string, unknown>> {
     return {}
   }
 

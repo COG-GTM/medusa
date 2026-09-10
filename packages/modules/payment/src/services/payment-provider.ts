@@ -58,7 +58,9 @@ export default class PaymentProviderService extends ModulesSdkUtils.MedusaIntern
 
   retrieveProvider(providerId: string): IPaymentProvider {
     try {
-      return this.__container__[providerId] as IPaymentProvider
+      return (this.__container__ as Record<string, IPaymentProvider>)[
+        providerId
+      ]
     } catch (err) {
       if (err.name === "AwilixResolutionError") {
         const errMessage = `

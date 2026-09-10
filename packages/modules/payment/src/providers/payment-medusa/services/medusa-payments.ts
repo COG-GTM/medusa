@@ -101,7 +101,7 @@ export class MedusaPaymentsProvider extends AbstractPaymentProvider<MedusaPaymen
     url: string,
     options: Omit<RequestInit, "body"> & { body?: object }
   ): Promise<T> {
-    const headers = {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Authorization: `Basic ${this.options_.api_key}`,
     }
