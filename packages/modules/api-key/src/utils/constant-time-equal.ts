@@ -1,16 +1,13 @@
 import crypto from "crypto"
 
 /**
- * Compares two hex encoded hashes without leaking their contents through the
- * comparison duration.
+ * Compares two hex encoded hashes without leaking their contents or their
+ * lengths through the comparison duration. Both values are reduced to a
+ * fixed size digest first, so the comparison always runs over 32 bytes.
  */
 export function constantTimeEqual(a: string, b: string): boolean {
-  const bufferA = Buffer.from(a, "utf8")
-  const bufferB = Buffer.from(b, "utf8")
+  const digestA = crypto.createHash("sha256").update(a, "utf8").digest()
+  const digestB = crypto.createHash("sha256").update(b, "utf8").digest()
 
-  if (bufferA.length !== bufferB.length) {
-    return false
-  }
-
-  return crypto.timingSafeEqual(bufferA, bufferB)
+  return crypto.timingSafeEqual(digestA, digestB)
 }
