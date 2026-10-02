@@ -5,6 +5,7 @@ import {
   InternalModuleDeclaration,
   ITaxModuleService,
   ITaxProvider,
+  Logger,
   ModulesSdkTypes,
   TaxRegionDTO,
   TaxTypes,
@@ -17,10 +18,16 @@ import {
   isString,
   MedusaContext,
   MedusaError,
+  Modules,
   ModulesSdkUtils,
 } from "@medusajs/framework/utils"
 import { TaxProvider, TaxRate, TaxRateRule, TaxRegion } from "@models"
 import { TaxProviderService } from "@services"
+import {
+  MissingTaxRegionBehavior,
+  TaxModuleEvents,
+  TaxModuleOptions,
+} from "../types"
 
 type InjectedDependencies = {
   baseRepository: DAL.RepositoryService
@@ -28,6 +35,7 @@ type InjectedDependencies = {
   taxRegionService: ModulesSdkTypes.IMedusaInternalService<any>
   taxRateRuleService: ModulesSdkTypes.IMedusaInternalService<any>
   taxProviderService: TaxProviderService
+  logger?: Logger
   [key: `tp_${string}`]: ITaxProvider
 }
 
@@ -59,6 +67,8 @@ export default class TaxModuleService
     InferEntityType<typeof TaxRateRule>
   >
   protected taxProviderService_: TaxProviderService
+  protected logger_: Logger
+  protected missingTaxRegionBehavior_: MissingTaxRegionBehavior
 
   constructor(
     {
@@ -67,8 +77,10 @@ export default class TaxModuleService
       taxRegionService,
       taxRateRuleService,
       taxProviderService,
+      logger,
     }: InjectedDependencies,
-    protected readonly moduleDeclaration: InternalModuleDeclaration
+    moduleOptions: TaxModuleOptions = {},
+    protected readonly moduleDeclaration?: InternalModuleDeclaration
   ) {
     // @ts-ignore
     super(...arguments)
@@ -79,6 +91,9 @@ export default class TaxModuleService
     this.taxRegionService_ = taxRegionService
     this.taxRateRuleService_ = taxRateRuleService
     this.taxProviderService_ = taxProviderService
+    this.logger_ = logger ?? (console as unknown as Logger)
+    this.missingTaxRegionBehavior_ =
+      moduleOptions?.missing_tax_region_behavior ?? "warn"
   }
 
   // @ts-expect-error
@@ -405,6 +420,7 @@ export default class TaxModuleService
   }
 
   @InjectManager()
+  @EmitEvents()
   async getTaxLines(
     items: (TaxTypes.TaxableItemDTO | TaxTypes.TaxableShippingDTO)[],
     calculationContext: TaxTypes.TaxCalculationContext,
@@ -431,6 +447,7 @@ export default class TaxModuleService
 
     const parentRegion = regions.find((r) => r.province_code === null)
     if (!parentRegion) {
+      this.handleMissingTaxRegion(normalizedContext, sharedContext)
       return []
     }
 
@@ -506,6 +523,42 @@ export default class TaxModuleService
     )
 
     return taxLines
+  }
+
+  private handleMissingTaxRegion(
+    calculationContext: TaxTypes.TaxCalculationContext,
+    sharedContext: Context
+  ) {
+    const { country_code, province_code } = calculationContext.address
+
+    if (this.missingTaxRegionBehavior_ === "ignore") {
+      return
+    }
+
+    if (this.missingTaxRegionBehavior_ === "throw") {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `No tax region found for country code: ${country_code}`
+      )
+    }
+
+    this.logger_.warn(
+      `No tax region found for country code: ${country_code}. No tax lines will be applied. Create a tax region for this country, or set the Tax Module's "missing_tax_region_behavior" option to "throw" or "ignore".`
+    )
+
+    sharedContext.messageAggregator?.saveRawMessageData(
+      {
+        eventName: TaxModuleEvents.TAX_REGION_MISSING,
+        source: Modules.TAX,
+        action: "missing",
+        object: "tax_region",
+        data: {
+          country_code,
+          province_code: province_code ?? null,
+        },
+      },
+      { sharedContext }
+    )
   }
 
   getProvider(providerId: string): ITaxProvider {
