@@ -34,6 +34,8 @@ import { createOrdersStep } from "../../order/steps/create-orders"
 import { authorizePaymentSessionStep } from "../../payment/steps/authorize-payment-session"
 import { registerUsageStep } from "../../promotion/steps/register-usage"
 import {
+  getCompleteCartLockOwnerStep,
+  renewCompleteCartLockStep,
   updateCartsStep,
   validateCartItemsStep,
   validateCartPaymentsStep,
@@ -69,6 +71,8 @@ export type CompleteCartWorkflowOutput = {
 const THREE_DAYS = 60 * 60 * 24 * 3
 const THIRTY_SECONDS = 30
 const TWO_MINUTES = 60 * 2
+// Covers the payment provider's worst-case authorization time, including network retries.
+const PAYMENT_AUTHORIZATION_LOCK_TTL = 60 * 5
 
 export const completeCartWorkflowId = "complete-cart"
 /**
@@ -359,10 +363,13 @@ export const completeCartWorkflow = createWorkflow(
     retentionTime: THREE_DAYS,
   },
   (input: WorkflowData<CompleteCartWorkflowInput>) => {
+    const lockOwnerId = getCompleteCartLockOwnerStep()
+
     acquireLockStep({
       key: input.id,
       timeout: THIRTY_SECONDS,
       ttl: TWO_MINUTES,
+      ownerId: lockOwnerId,
     })
 
     const [orderCart, cartData] = parallelize(
@@ -681,6 +688,12 @@ export const completeCartWorkflow = createWorkflow(
         input,
       })
 
+      renewCompleteCartLockStep({
+        key: input.id,
+        ownerId: lockOwnerId,
+        ttl: PAYMENT_AUTHORIZATION_LOCK_TTL,
+      })
+
       // We authorize payment sessions at the very end of the workflow to minimize the risk of
       // canceling the payment in the compensation flow. The only operations that can trigger it
       // is creating the transactions, the workflow hook, and the linking.
@@ -725,6 +738,7 @@ export const completeCartWorkflow = createWorkflow(
 
     releaseLockStep({
       key: input.id,
+      ownerId: lockOwnerId,
     })
 
     const result = transform({ order, orderId }, ({ order, orderId }) => {
