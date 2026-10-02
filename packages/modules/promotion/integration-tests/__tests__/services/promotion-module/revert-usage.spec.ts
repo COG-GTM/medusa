@@ -1,5 +1,5 @@
 import { IPromotionModuleService } from "@medusajs/framework/types"
-import { Modules } from "@medusajs/framework/utils"
+import { CampaignBudgetType, Modules } from "@medusajs/framework/utils"
 import { moduleIntegrationTestRunner, SuiteOptions } from "@medusajs/test-utils"
 import { createCampaigns } from "../../../__fixtures__/campaigns"
 import { createDefaultPromotion } from "../../../__fixtures__/promotion"
@@ -114,6 +114,75 @@ moduleIntegrationTestRunner({
               used: 0,
             })
           )
+        })
+
+        it("should not lose decrements when the same promotion usage is reverted concurrently", async () => {
+          const [usageCampaign] = await service.createCampaigns([
+            {
+              name: "concurrent-revert-usage",
+              campaign_identifier: "concurrent-revert-usage",
+              budget: { type: CampaignBudgetType.USAGE, limit: 10 },
+            },
+          ])
+          const promotion = await createDefaultPromotion(service, {
+            code: "CONCURRENT_REVERT",
+            campaign_id: usageCampaign.id,
+            limit: 10,
+          })
+
+          const [attributeCampaign] = await service.createCampaigns([
+            {
+              name: "concurrent-revert-attribute",
+              campaign_identifier: "concurrent-revert-attribute",
+              budget: {
+                type: CampaignBudgetType.USE_BY_ATTRIBUTE,
+                attribute: "customer_id",
+                limit: 10,
+              },
+            },
+          ])
+          const attributePromotion = await createDefaultPromotion(service, {
+            code: "CONCURRENT_REVERT_ATTR",
+            campaign_id: attributeCampaign.id,
+          })
+
+          const actions = [
+            { amount: 100, code: promotion.code! },
+            { amount: 100, code: attributePromotion.code! },
+          ]
+          const context = {
+            customer_id: "customer-id-1",
+            customer_email: "c1@email.com",
+          }
+          const uses = 5
+
+          for (let i = 0; i < uses; i++) {
+            await service.registerUsage(actions, context)
+          }
+
+          await Promise.all(
+            Array.from({ length: uses }, () =>
+              service.revertUsage(actions, context)
+            )
+          )
+
+          const revertedPromotion = await service.retrievePromotion(
+            promotion.id
+          )
+          expect(revertedPromotion.used).toBe(0)
+
+          const revertedUsageCampaign = await service.retrieveCampaign(
+            usageCampaign.id,
+            { relations: ["budget"] }
+          )
+          expect(revertedUsageCampaign.budget!.used).toBe(0)
+
+          const revertedAttributeCampaign = await service.retrieveCampaign(
+            attributeCampaign.id,
+            { relations: ["budget", "budget.usages"] }
+          )
+          expect(revertedAttributeCampaign.budget!.used).toBe(0)
+          expect(revertedAttributeCampaign.budget!.usages).toHaveLength(0)
         })
 
         it("should not throw an error when compute action with code does not exist", async () => {

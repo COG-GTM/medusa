@@ -260,13 +260,14 @@ export default class PromotionModuleService
     attributeValue: string,
     @MedusaContext() sharedContext: Context = {}
   ): Promise<void> {
+    // Read under the budget row lock held by the caller (`revertUsage`).
     const [campaignBudgetUsagePerAttributeValue] =
       await this.campaignBudgetUsageService_.list(
         {
           budget_id: budgetId,
           attribute_value: attributeValue,
         },
-        {},
+        { options: { refresh: true } },
         sharedContext
       )
 
@@ -540,6 +541,47 @@ export default class PromotionModuleService
     }
   }
 
+  protected async lockUsageRows_(
+    promotions: InferEntityType<typeof Promotion>[],
+    sharedContext: Context
+  ): Promise<void> {
+    const lockPromotionIds = promotions
+      .filter((promotion) => typeof promotion.limit === "number")
+      .map((promotion) => promotion.id)
+    const lockBudgetIds = Array.from(
+      new Set(
+        promotions
+          .map((promotion) => promotion.campaign?.budget?.id)
+          .filter(Boolean) as string[]
+      )
+    )
+
+    const manager = sharedContext.transactionManager as SqlEntityManager
+    const knex = manager?.getTransactionContext()
+    if (!knex) {
+      throw new MedusaError(
+        MedusaError.Types.UNEXPECTED_STATE,
+        "Promotion usage must be updated inside a transaction to serialize concurrent usage updates."
+      )
+    }
+
+    await knex.raw("SET LOCAL lock_timeout = '3s'")
+    if (lockPromotionIds.length) {
+      await knex("promotion")
+        .whereIn("id", lockPromotionIds)
+        .orderBy("id")
+        .forUpdate()
+        .select("id")
+    }
+    if (lockBudgetIds.length) {
+      await knex("promotion_campaign_budget")
+        .whereIn("id", lockBudgetIds)
+        .orderBy("id")
+        .forUpdate()
+        .select("id")
+    }
+  }
+
   @InjectTransactionManager()
   @EmitEvents()
   async revertUsage(
@@ -551,13 +593,27 @@ export default class PromotionModuleService
     const campaignBudgetMap = new Map<string, UpdateCampaignBudgetDTO>()
     const promotionUsageMap = new Map<string, { id: string; used: number }>()
 
-    const existingPromotions = await this.listActivePromotions_(
-      {
-        code: computedActions
-          .map((computedAction) => computedAction.code)
-          .filter(Boolean),
-      },
+    const promotionCodes = computedActions
+      .map((computedAction) => computedAction.code)
+      .filter(Boolean)
+
+    let existingPromotions = await this.listActivePromotions_(
+      { code: promotionCodes },
       { relations: ["campaign", "campaign.budget"] },
+      sharedContext
+    )
+
+    // Take the same row locks as `registerUsage`, in the same order, so a revert
+    // cannot interleave with a concurrent registration or revert and overwrite
+    // its write with a decrement computed from a stale used value.
+    await this.lockUsageRows_(existingPromotions, sharedContext)
+
+    existingPromotions = await this.listActivePromotions_(
+      { code: promotionCodes },
+      {
+        relations: ["campaign", "campaign.budget"],
+        options: { refresh: true },
+      },
       sharedContext
     )
 
