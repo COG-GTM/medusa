@@ -49,6 +49,7 @@ import {
   PrepareLineItemDataInput,
   prepareTaxLinesData,
 } from "../utils/prepare-line-item-data"
+import { updateTaxLinesWorkflow } from "./update-tax-lines"
 /**
  * The data to complete a cart and place an order.
  */
@@ -95,6 +96,13 @@ export const completeCartWorkflowId = "complete-cart"
  * and records it in the order's transactions as-is.
  *
  * If the cart's total is zero and covered by credit lines, the workflow can complete the cart without a payment session.
+ *
+ * ## Tax Lines
+ *
+ * If the cart's region has automatic taxes enabled, the workflow recalculates the cart's tax lines with the {@link updateTaxLinesWorkflow}
+ * before creating the order, then builds the order from the refreshed cart. So, the order's tax lines always reflect the cart's current
+ * shipping address and tax configurations, even if they changed after the cart's tax lines were last calculated. If the region doesn't
+ * have automatic taxes enabled, the order's tax lines are copied from the cart as-is.
  *
  * ### Don't Mutate the Cart in Hooks
  *
@@ -405,6 +413,29 @@ export const completeCartWorkflow = createWorkflow(
       cart: cartData.data,
     })
 
+    const refreshedCart = when(
+      "refresh-tax-lines",
+      { orderId, cart: cartData.data },
+      ({ orderId, cart }) => !orderId && !!cart.region?.automatic_taxes
+    ).then(() => {
+      updateTaxLinesWorkflow.runAsStep({
+        input: { cart_id: cartData.data.id },
+      })
+
+      const { data: cart } = useQueryGraphStep({
+        entity: "cart",
+        fields: completeCartFields,
+        filters: { id: input.id },
+        options: {
+          isList: false,
+        },
+      }).config({
+        name: "refetch-cart-after-tax-refresh",
+      })
+
+      return cart
+    })
+
     // If order ID does not exist, we are completing the cart for the first time
     const order = when("create-order", { orderId }, ({ orderId }) => {
       return !orderId
@@ -453,7 +484,12 @@ export const completeCartWorkflow = createWorkflow(
         }
       )
 
-      const cartToOrder = transform({ cart: cartData.data }, ({ cart }) => {
+      const cartToComplete = transform(
+        { refreshedCart, cart: cartData.data },
+        ({ refreshedCart, cart }) => refreshedCart ?? cart
+      )
+
+      const cartToOrder = transform({ cart: cartToComplete }, ({ cart }) => {
         const allItems = (cart.items ?? []).map((item) => {
           const input: PrepareLineItemDataInput = {
             item,
