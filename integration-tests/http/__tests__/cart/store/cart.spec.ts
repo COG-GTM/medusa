@@ -2615,6 +2615,75 @@ medusaIntegrationTestRunner({
             )
           })
 
+          it("should fail to complete cart with multiple processable payment sessions", async () => {
+            const paymentModule = appContainer.resolve(Modules.PAYMENT)
+
+            const paymentCollection = (
+              await api.post(
+                `/store/payment-collections`,
+                { cart_id: cart.id },
+                storeHeaders
+              )
+            ).data.payment_collection
+
+            const firstSession = await api
+              .post(
+                `/store/payment-collections/${paymentCollection.id}/payment-sessions`,
+                { provider_id: "pp_system_default" },
+                storeHeaders
+              )
+              .then((res) => res.data.payment_collection.payment_sessions[0])
+
+            const secondSession = await paymentModule.createPaymentSession(
+              paymentCollection.id,
+              {
+                provider_id: "pp_system_default",
+                amount: paymentCollection.amount,
+                currency_code: paymentCollection.currency_code,
+                data: {},
+              }
+            )
+
+            const sessionsBefore = await paymentModule.listPaymentSessions({
+              payment_collection_id: paymentCollection.id,
+            })
+            expect(sessionsBefore).toHaveLength(2)
+            expect(sessionsBefore).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  id: firstSession.id,
+                  status: PaymentSessionStatus.PENDING,
+                }),
+                expect.objectContaining({
+                  id: secondSession.id,
+                  status: PaymentSessionStatus.PENDING,
+                }),
+              ])
+            )
+
+            const response = await api
+              .post(`/store/carts/${cart.id}/complete`, {}, storeHeaders)
+              .catch((e) => e.response)
+
+            expect(response.status).toEqual(400)
+            expect(response.data.message).toContain(
+              "Cart has multiple processable payment sessions"
+            )
+
+            const sessionsAfter = await paymentModule.listPaymentSessions({
+              payment_collection_id: paymentCollection.id,
+            })
+            expect(sessionsAfter).toHaveLength(2)
+            for (const session of sessionsAfter) {
+              expect(session.status).toEqual(PaymentSessionStatus.PENDING)
+            }
+
+            const updatedCart = (
+              await api.get(`/store/carts/${cart.id}`, storeHeaders)
+            ).data.cart
+            expect(updatedCart.completed_at).toBeNull()
+          })
+
           it("should successfully complete cart with credit lines alone", async () => {
             const oldCart = (
               await api.get(`/store/carts/${cart.id}`, storeHeaders)
