@@ -685,8 +685,7 @@ export const completeCartWorkflow = createWorkflow(
       // canceling the payment in the compensation flow. The only operations that can trigger it
       // is creating the transactions, the workflow hook, and the linking.
       const payment = authorizePaymentSessionStep({
-        // We choose the first payment session, as there will only be one active payment session
-        // This might change in the future.
+        // validateCartPaymentsStep guarantees exactly one processable payment session
         id: paymentSessions![0].id,
       })
 
