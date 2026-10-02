@@ -30,7 +30,7 @@ import {
 import { acquireLockStep } from "../../locking/steps/acquire-lock"
 import { releaseLockStep } from "../../locking/steps/release-lock"
 import { addOrderTransactionStep } from "../../order/steps/add-order-transaction"
-import { createOrdersStep } from "../../order/steps/create-orders"
+import { createOrdersStepId } from "../../order/steps/create-orders"
 import { authorizePaymentSessionStep } from "../../payment/steps/authorize-payment-session"
 import { registerUsageStep } from "../../promotion/steps/register-usage"
 import {
@@ -40,6 +40,7 @@ import {
   validateShippingStep,
 } from "../steps"
 import { compensatePaymentIfNeededStep } from "../steps/compensate-payment-if-needed"
+import { createOrderFromCartStep } from "../steps/create-order-from-cart"
 import { reserveInventoryStep } from "../steps/reserve-inventory"
 import { completeCartFields } from "../utils/fields"
 import { prepareConfirmInventoryInput } from "../utils/prepare-confirm-inventory-input"
@@ -539,7 +540,11 @@ export const completeCartWorkflow = createWorkflow(
         }
       })
 
-      const createdOrders = createOrdersStep([cartToOrder])
+      // Keeps the `create-orders` step name so existing workflow customizations still target it.
+      const createdOrders = createOrderFromCartStep({
+        cart_id: cartData.data.id,
+        order: cartToOrder,
+      }).config({ name: createOrdersStepId })
 
       const createdOrder = transform({ createdOrders }, ({ createdOrders }) => {
         return createdOrders[0]
@@ -616,12 +621,7 @@ export const completeCartWorkflow = createWorkflow(
       const linksToCreate = transform(
         { cart: cartData.data, createdOrder },
         ({ cart, createdOrder }) => {
-          const links: LinkDefinition[] = [
-            {
-              [Modules.ORDER]: { order_id: createdOrder.id },
-              [Modules.CART]: { cart_id: cart.id },
-            },
-          ]
+          const links: LinkDefinition[] = []
 
           if (cart.promotions?.length) {
             cart.promotions.forEach((promotion: PromotionDTO) => {

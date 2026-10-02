@@ -1210,7 +1210,7 @@ medusaIntegrationTestRunner({
               eventGroupId
             ) ?? []
 
-          expect(grouppedEventBefore).toHaveLength(17)
+          expect(grouppedEventBefore).toHaveLength(16)
           expect(grouppedEventAfter).toHaveLength(0) // events have been compensated
 
           expect(errors[0].error.message).toBe(
@@ -1397,6 +1397,149 @@ medusaIntegrationTestRunner({
           })
 
           expect(completeCartCalled).toBe(false)
+        })
+
+        it("should not create a duplicate order when a retry follows a crash after the order was created", async () => {
+          const salesChannel = await scModuleService.createSalesChannels({
+            name: "Webshop",
+          })
+
+          const location = await stockLocationModule.createStockLocations({
+            name: "Warehouse",
+          })
+
+          const [product] = await productModule.createProducts([
+            {
+              title: "Test product",
+              status: ProductStatus.PUBLISHED,
+              variants: [
+                {
+                  title: "Test variant",
+                  manage_inventory: false,
+                },
+              ],
+            },
+          ])
+
+          const priceSet = await pricingModule.createPriceSets({
+            prices: [
+              {
+                amount: 3000,
+                currency_code: "usd",
+              },
+            ],
+          })
+
+          await remoteLink.create([
+            {
+              [Modules.PRODUCT]: {
+                variant_id: product.variants[0].id,
+              },
+              [Modules.PRICING]: {
+                price_set_id: priceSet.id,
+              },
+            },
+            {
+              [Modules.SALES_CHANNEL]: {
+                sales_channel_id: salesChannel.id,
+              },
+              [Modules.STOCK_LOCATION]: {
+                stock_location_id: location.id,
+              },
+            },
+          ])
+
+          const cart = await cartModuleService.createCarts({
+            currency_code: "usd",
+            sales_channel_id: salesChannel.id,
+          })
+
+          await addToCartWorkflow(appContainer).run({
+            input: {
+              items: [
+                {
+                  variant_id: product.variants[0].id,
+                  quantity: 1,
+                  requires_shipping: false,
+                },
+              ],
+              cart_id: cart.id,
+            },
+          })
+
+          await createPaymentCollectionForCartWorkflow(appContainer).run({
+            input: {
+              cart_id: cart.id,
+            },
+          })
+
+          const [payCol] = await remoteQuery(
+            remoteQueryObjectFromString({
+              entryPoint: "cart_payment_collection",
+              variables: { filters: { cart_id: cart.id } },
+              fields: ["payment_collection_id"],
+            })
+          )
+
+          await createPaymentSessionsWorkflow(appContainer).run({
+            input: {
+              payment_collection_id: payCol.payment_collection_id,
+              provider_id: "pp_system_default",
+              context: {},
+              data: {},
+            },
+          })
+
+          // Simulate a process crash right after the order is created: the
+          // workflow stops and the order/link compensations never run.
+          const orderModule = appContainer.resolve(Modules.ORDER)
+          const link = appContainer.resolve(ContainerRegistrationKeys.LINK)
+          const deleteOrdersSpy = jest
+            .spyOn(orderModule, "deleteOrders")
+            .mockImplementation(async () => {})
+          const dismissLinkSpy = jest
+            .spyOn(link, "dismiss")
+            .mockImplementation(async () => [])
+
+          const crashingWorkflow = completeCartWorkflow(appContainer)
+          crashingWorkflow.insertActionAfter("create-orders", "crash", {
+            invoke: async () => {
+              throw new Error("Simulated crash after order creation")
+            },
+          })
+
+          const { errors } = await crashingWorkflow.run({
+            input: { id: cart.id },
+            throwOnError: false,
+          })
+
+          deleteOrdersSpy.mockRestore()
+          dismissLinkSpy.mockRestore()
+
+          expect(errors[0].error.message).toBe(
+            "Simulated crash after order creation"
+          )
+
+          const { result } = await completeCartWorkflow(appContainer).run({
+            input: { id: cart.id },
+          })
+
+          const { data: orders } = await query.graph({
+            entity: "order",
+            fields: ["id"],
+            filters: { sales_channel_id: salesChannel.id },
+          })
+
+          const { data: orderCartLinks } = await query.graph({
+            entity: "order_cart",
+            fields: ["order_id", "cart_id"],
+            filters: { cart_id: cart.id },
+          })
+
+          expect(orders).toHaveLength(1)
+          expect(orderCartLinks).toHaveLength(1)
+          expect(orderCartLinks[0].order_id).toBe(orders[0].id)
+          expect(result.id).toBe(orders[0].id)
         })
 
         it("should NOT complete a cart when the payment webhook carries no session_id", async () => {
