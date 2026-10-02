@@ -12,7 +12,10 @@ import { useQueryGraphStep } from "../../common"
 import { acquireLockStep, releaseLockStep } from "../../locking"
 import { updatePaymentCollectionStep } from "../../payment-collection"
 import { deletePaymentSessionsWorkflow } from "../../payment-collection/workflows/delete-payment-sessions"
-import { validateCartStep } from "../steps"
+import {
+  validateCartStep,
+  validateRefreshablePaymentSessionsStep,
+} from "../steps"
 
 /**
  * The details of the cart to refresh.
@@ -32,8 +35,12 @@ export const refreshPaymentCollectionForCartWorkflowId =
   "refresh-payment-collection-for-cart"
 /**
  * This workflow refreshes a cart's payment collection, which is useful once the cart is created or when its details
- * are updated. If the cart's total changes to the amount in its payment collection, the payment collection's payment sessions are
- * deleted. It also syncs the payment collection's amount, currency code, and other details with the details in the cart.
+ * are updated. If the cart's total changes to the amount in its payment collection, the payment collection's payment sessions whose
+ * amount or currency no longer match the cart are deleted. It also syncs the payment collection's amount, currency code, and other
+ * details with the details in the cart.
+ *
+ * If a payment session that must be deleted is `authorized`, `captured`, or `pending_authorization`, the workflow throws an error
+ * instead of deleting it, so a payment the customer is authorizing isn't discarded.
  *
  * This workflow is used by other cart-related workflows, such as the {@link refreshCartItemsWorkflow} to refresh the cart's
  * payment collection after an update.
@@ -93,6 +100,9 @@ export const refreshPaymentCollectionForCartWorkflow = createWorkflow(
           "payment_collection.amount",
           "payment_collection.currency_code",
           "payment_collection.payment_sessions.id",
+          "payment_collection.payment_sessions.status",
+          "payment_collection.payment_sessions.currency_code",
+          "payment_collection.payment_sessions.raw_amount",
         ],
         filters: { id: cartId },
         options: {
@@ -112,8 +122,8 @@ export const refreshPaymentCollectionForCartWorkflow = createWorkflow(
 
     acquireLockStep({
       key: cart.id,
-      timeout: 2,
-      ttl: 10,
+      timeout: 10,
+      ttl: 30,
     })
 
     const validate = createHook("validate", {
@@ -137,14 +147,24 @@ export const refreshPaymentCollectionForCartWorkflow = createWorkflow(
         return shouldExecute
       }
     ).then(() => {
+      const stalePaymentSessions = transform({ cart }, ({ cart }) => {
+        return (cart.payment_collection?.payment_sessions ?? []).filter(
+          (ps) =>
+            ps.currency_code !== cart.currency_code ||
+            !MathBN.eq(ps.raw_amount ?? ps.amount, cart.raw_total)
+        )
+      })
+
+      validateRefreshablePaymentSessionsStep({
+        cart_id: cart.id,
+        payment_sessions: stalePaymentSessions,
+      })
+
       const deletePaymentSessionInput = transform(
-        { paymentCollection: cart.payment_collection },
-        (data) => {
+        { stalePaymentSessions },
+        ({ stalePaymentSessions }) => {
           return {
-            ids:
-              data.paymentCollection?.payment_sessions
-                ?.map((ps) => ps.id)
-                ?.flat(1) || [],
+            ids: stalePaymentSessions.map((ps) => ps.id),
           }
         }
       )
