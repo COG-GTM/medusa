@@ -23,7 +23,8 @@ export const validateCartPaymentsStepId = "validate-cart-payments"
 /**
  * This step validates a cart's payment sessions. Their status must
  * be `pending`, `requires_more`, `authorized`, or `captured`, and their payment
- * provider must be enabled in the cart's region. If not valid, the step throws an error.
+ * provider must be enabled in the cart's region. The amount of the payment session
+ * that will be authorized must also equal the cart's total. If not valid, the step throws an error.
  *
  * :::tip
  *
@@ -82,6 +83,21 @@ export const validateCartPaymentsStep = createStep(
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Payment sessions are required to complete cart`
+      )
+    }
+
+    // Payment session amounts are created from the payment collection's numeric
+    // amount, so compare at numeric precision rather than against raw_total.
+    const sessionAmount = paymentsToProcess[0].amount
+
+    if (!MathBN.eq(sessionAmount, total)) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `The payment session's amount ${MathBN.convert(
+          sessionAmount
+        ).toString()} does not match the cart's total ${MathBN.convert(
+          total
+        ).toString()}. Refresh the cart's payment collection and initialize a new payment session before completing the cart.`
       )
     }
 

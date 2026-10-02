@@ -81,18 +81,17 @@ export const completeCartWorkflowId = "complete-cart"
  *
  * ## Payment Validation
  *
- * When completing a cart, this workflow validates the cart's payment sessions, but it doesn't validate payment amounts.
+ * When completing a cart, this workflow validates the cart's payment sessions and their amount.
  *
  * The workflow requires the cart's payment collection to have at least one payment session in a processable status: `pending`,
  * `requires_more`, `authorized`, `captured`, or `pending_authorization` (used for asynchronous or deferred authorization, such as
  * bank transfers). If the payment collection hasn't been initiated, or no payment session is in a processable status, the workflow
  * throws an error.
  *
- * The workflow doesn't compare the authorized or captured amount against the cart's total. It neither requires the amount to equal
- * the cart's total nor enforces a minimum amount. The amount that's authorized or captured is the payment session's own amount, which
- * is set to the cart's total when the payment collection is created or refreshed. So, if the cart changes after its payment collection
- * is created without the payment collection being refreshed, the workflow authorizes or captures the payment session's existing amount
- * and records it in the order's transactions as-is.
+ * The amount of the payment session that's authorized or captured must equal the cart's total. The payment session's amount is set to
+ * the cart's total when the payment collection is created or refreshed. So, if the cart changes after its payment collection is created
+ * without the payment collection being refreshed, the workflow throws an error instead of authorizing or capturing the stale amount.
+ * In that case, refresh the cart's payment collection and initialize a new payment session before completing the cart.
  *
  * If the cart's total is zero and covered by credit lines, the workflow can complete the cart without a payment session.
  *
