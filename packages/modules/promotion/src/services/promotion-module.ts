@@ -916,7 +916,12 @@ export default class PromotionModuleService
         }
       }
 
-      // Check promotion usage limit
+      // Advisory, unlocked usage limit check: applying a promotion to a cart
+      // does not consume usage, so concurrent (or sequential) applications of
+      // the same code to different carts can all pass here. The limit is
+      // enforced when usage is consumed, by `registerUsage` at cart completion,
+      // which re-reads `used` under a `promotion` row lock and throws once the
+      // limit would be exceeded. Locking here would not add any protection.
       if (!skipUsageLimitChecks && typeof promotion.limit === "number") {
         if ((promotion.used ?? 0) >= promotion.limit) {
           computedActions.push({
