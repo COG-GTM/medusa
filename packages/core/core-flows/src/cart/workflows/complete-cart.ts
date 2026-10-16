@@ -39,6 +39,7 @@ import {
   validateCartPaymentsStep,
   validateShippingStep,
 } from "../steps"
+import { validateCartTaxConsistencyStep } from "../steps/validate-cart-tax-consistency"
 import { compensatePaymentIfNeededStep } from "../steps/compensate-payment-if-needed"
 import { reserveInventoryStep } from "../steps/reserve-inventory"
 import { completeCartFields } from "../utils/fields"
@@ -430,6 +431,8 @@ export const completeCartWorkflow = createWorkflow(
         cart: cartData.data,
         shippingOptions: shippingOptionsData.data,
       })
+
+      validateCartTaxConsistencyStep({ cart: cartData.data })
 
       const { variants, sales_channel_id } = transform(
         { cart: cartData.data },
