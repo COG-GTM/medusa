@@ -27,6 +27,7 @@ import {
   IPaymentModuleService,
   IPricingModuleService,
   IProductModuleService,
+  IPromotionModuleService,
   IRegionModuleService,
   ISalesChannelModuleService,
   IStockLocationService,
@@ -1216,6 +1217,316 @@ medusaIntegrationTestRunner({
           expect(errors[0].error.message).toBe(
             "Failed to do something before ending complete cart workflow"
           )
+        })
+
+        describe("promotion usage registration", () => {
+          const setupCartWithAdjustments = async (
+            adjustments: (items: { id: string }[]) => {
+              item_id: string
+              amount: number
+              code?: string
+              promotion_id?: string
+            }[]
+          ) => {
+            const salesChannel = await scModuleService.createSalesChannels({
+              name: "Webshop",
+            })
+
+            const location = await stockLocationModule.createStockLocations({
+              name: "Warehouse",
+            })
+
+            const region = await regionModuleService.createRegions({
+              name: "US",
+              currency_code: "usd",
+            })
+
+            await linkRegionPaymentProviders(appContainer, region.id)
+
+            await remoteLink.create([
+              {
+                [Modules.SALES_CHANNEL]: {
+                  sales_channel_id: salesChannel.id,
+                },
+                [Modules.STOCK_LOCATION]: {
+                  stock_location_id: location.id,
+                },
+              },
+            ])
+
+            const cart = await cartModuleService.createCarts({
+              currency_code: "usd",
+              sales_channel_id: salesChannel.id,
+              region_id: region.id,
+              email: "promo@test.com",
+            })
+
+            await addToCartWorkflow(appContainer).run({
+              input: {
+                items: [
+                  {
+                    title: "Item A",
+                    requires_shipping: false,
+                    is_discountable: true,
+                    is_tax_inclusive: false,
+                    unit_price: 3000,
+                    quantity: 1,
+                  },
+                  {
+                    title: "Item B",
+                    requires_shipping: false,
+                    is_discountable: true,
+                    is_tax_inclusive: false,
+                    unit_price: 2000,
+                    quantity: 1,
+                  },
+                ],
+                cart_id: cart.id,
+              },
+            })
+
+            const items = await cartModuleService.listLineItems(
+              { cart_id: cart.id },
+              { order: { unit_price: "DESC" } }
+            )
+
+            await cartModuleService.addLineItemAdjustments(adjustments(items))
+
+            await createPaymentCollectionForCartWorkflow(appContainer).run({
+              input: {
+                cart_id: cart.id,
+              },
+            })
+
+            const [paymentCollection] =
+              await paymentModule.listPaymentCollections({})
+
+            await createPaymentSessionsWorkflow(appContainer).run({
+              input: {
+                payment_collection_id: paymentCollection.id,
+                provider_id: "pp_system_default",
+                context: {},
+                data: {},
+              },
+            })
+
+            return cart
+          }
+
+          const createPromotionWithSpendBudget = async (code: string) => {
+            const promotionModule = appContainer.resolve(
+              Modules.PROMOTION
+            ) as IPromotionModuleService
+
+            return await promotionModule.createPromotions({
+              code,
+              type: "standard",
+              status: "active",
+              limit: 10,
+              application_method: {
+                type: "fixed",
+                target_type: "items",
+                allocation: "each",
+                value: 100,
+                max_quantity: 1,
+                currency_code: "usd",
+              },
+              campaign: {
+                name: `${code} campaign`,
+                campaign_identifier: `${code}-campaign`,
+                budget: {
+                  type: "spend",
+                  limit: 100000,
+                  currency_code: "usd",
+                },
+              },
+            })
+          }
+
+          const toComparableActions = (actions: any[]) =>
+            actions.map((action) => ({
+              code: action.code,
+              amount: Number(action.amount),
+            }))
+
+          it("should register usage once per promotion code, summing amounts, and ignore adjustments without a code", async () => {
+            const promotionModule = appContainer.resolve(
+              Modules.PROMOTION
+            ) as IPromotionModuleService
+            const promotion = await createPromotionWithSpendBudget("DEDUPE10")
+
+            const cart = await setupCartWithAdjustments((items) => [
+              {
+                item_id: items[0].id,
+                amount: 100,
+                code: promotion.code!,
+                promotion_id: promotion.id,
+              },
+              {
+                item_id: items[1].id,
+                amount: 50,
+                code: promotion.code!,
+                promotion_id: promotion.id,
+              },
+              {
+                item_id: items[0].id,
+                amount: 25,
+              },
+            ])
+
+            const registerUsageSpy = jest.spyOn(
+              promotionModule,
+              "registerUsage"
+            )
+
+            try {
+              await completeCartWorkflow(appContainer).run({
+                input: { id: cart.id },
+              })
+
+              expect(registerUsageSpy).toHaveBeenCalledTimes(1)
+              const [computedActions, registrationContext] =
+                registerUsageSpy.mock.calls[0]
+              expect(toComparableActions(computedActions)).toEqual([
+                { code: "DEDUPE10", amount: 150 },
+              ])
+              expect(registrationContext).toEqual({
+                customer_id: null,
+                customer_email: "promo@test.com",
+              })
+            } finally {
+              registerUsageSpy.mockRestore()
+            }
+
+            const updatedPromotion = await promotionModule.retrievePromotion(
+              promotion.id,
+              { relations: ["campaign", "campaign.budget"] }
+            )
+
+            expect(updatedPromotion.used).toEqual(1)
+            expect(Number(updatedPromotion.campaign!.budget!.used)).toEqual(150)
+          })
+
+          it("should not call registerUsage when no adjustment carries a promotion code", async () => {
+            const promotionModule = appContainer.resolve(
+              Modules.PROMOTION
+            ) as IPromotionModuleService
+
+            const cart = await setupCartWithAdjustments((items) => [
+              { item_id: items[0].id, amount: 100 },
+              { item_id: items[1].id, amount: 50 },
+            ])
+
+            const registerUsageSpy = jest.spyOn(
+              promotionModule,
+              "registerUsage"
+            )
+
+            try {
+              const { result } = await completeCartWorkflow(appContainer).run({
+                input: { id: cart.id },
+              })
+
+              expect(result.id).toEqual(expect.any(String))
+              expect(registerUsageSpy).not.toHaveBeenCalled()
+            } finally {
+              registerUsageSpy.mockRestore()
+            }
+          })
+
+          it("should revert the registered promotion usage when completion fails after usage registration", async () => {
+            const promotionModule = appContainer.resolve(
+              Modules.PROMOTION
+            ) as IPromotionModuleService
+            const promotion = await createPromotionWithSpendBudget("REVERT10")
+
+            const cart = await setupCartWithAdjustments((items) => [
+              {
+                item_id: items[0].id,
+                amount: 100,
+                code: promotion.code!,
+                promotion_id: promotion.id,
+              },
+              {
+                item_id: items[1].id,
+                amount: 50,
+                code: promotion.code!,
+                promotion_id: promotion.id,
+              },
+              {
+                item_id: items[1].id,
+                amount: 10,
+              },
+            ])
+
+            const registerUsageSpy = jest.spyOn(
+              promotionModule,
+              "registerUsage"
+            )
+            const revertUsageSpy = jest.spyOn(promotionModule, "revertUsage")
+
+            let usageAfterRegistration: {
+              used: number | null | undefined
+              budgetUsed: number
+            } | null = null
+
+            const workflow = completeCartWorkflow(appContainer)
+
+            workflow.addAction("throw", {
+              invoke: async function failAfterUsageRegistration() {
+                const registered = await promotionModule.retrievePromotion(
+                  promotion.id,
+                  { relations: ["campaign", "campaign.budget"] }
+                )
+                usageAfterRegistration = {
+                  used: registered.used,
+                  budgetUsed: Number(registered.campaign!.budget!.used),
+                }
+
+                throw new Error("Failed after promotion usage registration")
+              },
+            })
+
+            try {
+              const { errors } = await workflow.run({
+                input: { id: cart.id },
+                throwOnError: false,
+              })
+
+              expect(errors[0].error.message).toBe(
+                "Failed after promotion usage registration"
+              )
+
+              expect(usageAfterRegistration).toEqual({
+                used: 1,
+                budgetUsed: 150,
+              })
+
+              expect(registerUsageSpy).toHaveBeenCalledTimes(1)
+              expect(revertUsageSpy).toHaveBeenCalledTimes(1)
+
+              const [revertedActions, revertContext] =
+                revertUsageSpy.mock.calls[0]
+              expect(toComparableActions(revertedActions)).toEqual([
+                { code: "REVERT10", amount: 150 },
+              ])
+              expect(revertContext).toEqual(registerUsageSpy.mock.calls[0][1])
+            } finally {
+              registerUsageSpy.mockRestore()
+              revertUsageSpy.mockRestore()
+            }
+
+            const revertedPromotion = await promotionModule.retrievePromotion(
+              promotion.id,
+              { relations: ["campaign", "campaign.budget"] }
+            )
+
+            expect(revertedPromotion.used).toEqual(0)
+            expect(Number(revertedPromotion.campaign!.budget!.used)).toEqual(0)
+
+            const updatedCart = await cartModuleService.retrieveCart(cart.id)
+            expect(updatedCart.completed_at).toBeNull()
+          })
         })
 
         it("should avoid completing cart when order already exists", async () => {
