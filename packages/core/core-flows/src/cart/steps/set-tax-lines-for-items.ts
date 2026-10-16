@@ -64,19 +64,33 @@ export const setTaxLinesForItemsStep = createStep(
     const { cart, item_tax_lines, shipping_tax_lines } = data
     const cartService = container.resolve<ICartModuleService>(Modules.CART)
 
+    // Snapshot every existing tax line of the cart, not only those of the items
+    // and shipping methods that get new tax lines, since setting the tax lines
+    // replaces all of the cart's tax lines.
+    const shippingMethodIds = Array.from(
+      new Set([
+        ...(cart.shipping_methods ?? []).map((sm) => sm.id),
+        ...shipping_tax_lines.map((t) => t.shipping_line_id),
+      ])
+    )
+    const lineItemIds = Array.from(
+      new Set([
+        ...(cart.items ?? []).map((item) => item.id),
+        ...item_tax_lines.map((t) => t.line_item_id),
+      ])
+    )
+
     const [existingShippingMethodTaxLines, existingLineItemTaxLines] =
       await promiseAll([
-        shipping_tax_lines.length
+        shippingMethodIds.length
           ? cartService.listShippingMethodTaxLines({
-              shipping_method_id: shipping_tax_lines.map(
-                (t) => t.shipping_line_id
-              ),
+              shipping_method_id: shippingMethodIds,
             })
           : [],
 
-        item_tax_lines.length
+        lineItemIds.length
           ? cartService.listLineItemTaxLines({
-              item_id: item_tax_lines.map((t) => t.line_item_id),
+              item_id: lineItemIds,
             })
           : [],
       ])

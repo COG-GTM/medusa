@@ -3831,6 +3831,66 @@ medusaIntegrationTestRunner({
               ])
               expect(order.tax_total).toEqual(cartBeforeCompletion.tax_total)
             })
+
+            it("should restore the cart's tax lines when completion fails after revalidating them", async () => {
+              const initialCart = await fetchCartWithTaxes(cart.id)
+              const originalItemRate = initialCart.items[0].tax_lines[0].rate
+              const originalShippingRate =
+                initialCart.shipping_methods[0].tax_lines[0].rate
+
+              // Without a tax region, revalidation clears all of the cart's tax lines
+              const { tax_regions: taxRegions } = (
+                await api.get(
+                  `/admin/tax-regions?country_code=${shippingAddressData.country_code.toLowerCase()}`,
+                  adminHeaders
+                )
+              ).data
+
+              for (const taxRegion of taxRegions.filter(
+                (tr) => !tr.parent_id
+              )) {
+                await api.delete(
+                  `/admin/tax-regions/${taxRegion.id}`,
+                  adminHeaders
+                )
+              }
+
+              // Make completion fail after the tax lines are revalidated
+              await api.delete(
+                `/admin/shipping-options/${initialCart.shipping_methods[0].shipping_option_id}`,
+                adminHeaders
+              )
+
+              const paymentCollection = (
+                await api.post(
+                  `/store/payment-collections`,
+                  { cart_id: cart.id },
+                  storeHeaders
+                )
+              ).data.payment_collection
+
+              await api.post(
+                `/store/payment-collections/${paymentCollection.id}/payment-sessions`,
+                { provider_id: "pp_system_default" },
+                storeHeaders
+              )
+
+              const completion = await api
+                .post(`/store/carts/${cart.id}/complete`, {}, storeHeaders)
+                .catch((e) => e.response)
+
+              expect(completion.data.type).not.toEqual("order")
+
+              const cartAfterFailure = await fetchCartWithTaxes(cart.id)
+
+              expect(cartAfterFailure.items[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: originalItemRate }),
+              ])
+              expect(cartAfterFailure.shipping_methods[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: originalShippingRate }),
+              ])
+              expect(cartAfterFailure.tax_total).toEqual(initialCart.tax_total)
+            })
           })
         })
 
