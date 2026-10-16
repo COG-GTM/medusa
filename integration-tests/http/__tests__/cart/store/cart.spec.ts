@@ -2423,6 +2423,19 @@ medusaIntegrationTestRunner({
           })
 
           it("should successfully complete cart and fail on concurrent complete", async () => {
+            await createCartCreditLinesWorkflow.run({
+              input: [
+                {
+                  cart_id: cart.id,
+                  amount: 100,
+                  currency_code: "usd",
+                  reference: "test",
+                  reference_id: "test",
+                },
+              ],
+              container: appContainer,
+            })
+
             const paymentCollection = (
               await api.post(
                 `/store/payment-collections`,
@@ -2436,19 +2449,6 @@ medusaIntegrationTestRunner({
               { provider_id: "pp_system_default" },
               storeHeaders
             )
-
-            await createCartCreditLinesWorkflow.run({
-              input: [
-                {
-                  cart_id: cart.id,
-                  amount: 100,
-                  currency_code: "usd",
-                  reference: "test",
-                  reference_id: "test",
-                },
-              ],
-              container: appContainer,
-            })
 
             // Concurrently complete the cart
             const completedCart: any[] = []
@@ -2497,6 +2497,19 @@ medusaIntegrationTestRunner({
           })
 
           it("should successfully complete cart", async () => {
+            await createCartCreditLinesWorkflow.run({
+              input: [
+                {
+                  cart_id: cart.id,
+                  amount: 100,
+                  currency_code: "usd",
+                  reference: "test",
+                  reference_id: "test",
+                },
+              ],
+              container: appContainer,
+            })
+
             const paymentCollection = (
               await api.post(
                 `/store/payment-collections`,
@@ -2510,19 +2523,6 @@ medusaIntegrationTestRunner({
               { provider_id: "pp_system_default" },
               storeHeaders
             )
-
-            await createCartCreditLinesWorkflow.run({
-              input: [
-                {
-                  cart_id: cart.id,
-                  amount: 100,
-                  currency_code: "usd",
-                  reference: "test",
-                  reference_id: "test",
-                },
-              ],
-              container: appContainer,
-            })
 
             const response = await api.post(
               `/store/carts/${cart.id}/complete`,

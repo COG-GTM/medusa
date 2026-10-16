@@ -49,6 +49,7 @@ export const validateCartPaymentsStep = createStep(
         raw_total: rawTotal,
         credit_line_total,
         region_id: regionId,
+        completed_at: completedAt,
       },
     } = data
 
@@ -87,12 +88,15 @@ export const validateCartPaymentsStep = createStep(
       )
     }
 
-    // Mirrors the comparison used by refreshPaymentCollectionForCartWorkflow
+    // Mirrors the comparison used by refreshPaymentCollectionForCartWorkflow.
+    // Already completed carts are skipped so idempotent retries still return
+    // the existing order.
     const { raw_amount: collectionRawAmount } = paymentCollection as {
       raw_amount?: BigNumberInput
     }
 
     if (
+      !completedAt &&
       !MathBN.eq(
         collectionRawAmount ?? paymentCollection.amount,
         rawTotal ?? total
@@ -104,16 +108,15 @@ export const validateCartPaymentsStep = createStep(
       )
     }
 
+    // Only the first processable session is authorized on completion.
     // Sessions are created from the collection's numeric amount, so compare
-    // them against the cart's numeric total
-    const staleSession = paymentsToProcess.find(
-      (ps) => !MathBN.eq(ps.amount, total)
-    )
+    // it against the cart's numeric total.
+    const [sessionToAuthorize] = paymentsToProcess
 
-    if (staleSession) {
+    if (!completedAt && !MathBN.eq(sessionToAuthorize.amount, total)) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
-        `Payment session ${staleSession.id} amount (${staleSession.amount}) does not match the cart total (${total}). Refresh the cart's payment sessions before completing the cart.`
+        `Payment session ${sessionToAuthorize.id} amount (${sessionToAuthorize.amount}) does not match the cart total (${total}). Refresh the cart's payment sessions before completing the cart.`
       )
     }
 

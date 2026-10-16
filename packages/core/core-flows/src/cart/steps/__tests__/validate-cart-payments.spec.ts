@@ -116,4 +116,42 @@ describe("validateCartPaymentsStep", () => {
 
     expect(result).toEqual([])
   })
+
+  it("should only validate the payment session that will be authorized", async () => {
+    const cart = buildCart({
+      total: 4000,
+      collectionAmount: 4000,
+      sessionAmount: 4000,
+    })
+    cart.payment_collection.payment_sessions.push({
+      id: "payses_456",
+      amount: 3000,
+      status: "pending",
+      provider_id: "pp_system_default",
+    })
+
+    const { result } = await workflow(container).run({
+      input: { cart },
+    })
+
+    expect(result).toEqual([
+      expect.objectContaining({ id: "payses_123" }),
+      expect.objectContaining({ id: "payses_456" }),
+    ])
+  })
+
+  it("should skip amount validation when the cart is already completed", async () => {
+    const cart = buildCart({
+      total: 4000,
+      collectionAmount: 3000,
+      sessionAmount: 3000,
+    })
+    cart.completed_at = new Date()
+
+    const { result } = await workflow(container).run({
+      input: { cart },
+    })
+
+    expect(result).toEqual([expect.objectContaining({ id: "payses_123" })])
+  })
 })
