@@ -74,6 +74,14 @@ export const refreshPaymentCollectionForCartWorkflow = createWorkflow(
       return input.cart_id ?? input.cart?.id
     })
 
+    // Lock before fetching so the cart is validated after any in-flight
+    // mutation or completion holding the lock has finished.
+    acquireLockStep({
+      key: cartId,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
+    })
+
     const fetchCart = when(
       "should-fetch-cart",
       { shouldExecute },
@@ -85,6 +93,7 @@ export const refreshPaymentCollectionForCartWorkflow = createWorkflow(
         entity: "cart",
         fields: [
           "id",
+          "completed_at",
           "region_id",
           "currency_code",
           "total",
@@ -110,12 +119,6 @@ export const refreshPaymentCollectionForCartWorkflow = createWorkflow(
     })
 
     validateCartStep({ cart })
-
-    acquireLockStep({
-      key: cart.id,
-      timeout: CART_LOCK_TIMEOUT,
-      ttl: CART_LOCK_TTL,
-    })
 
     const validate = createHook("validate", {
       input,
@@ -173,7 +176,7 @@ export const refreshPaymentCollectionForCartWorkflow = createWorkflow(
     })
 
     releaseLockStep({
-      key: cart.id,
+      key: cartId,
     })
 
     return new WorkflowResponse(void 0, {

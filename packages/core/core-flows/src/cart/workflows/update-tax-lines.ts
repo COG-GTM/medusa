@@ -139,7 +139,7 @@ export const updateTaxLinesWorkflow = createWorkflow(
   updateTaxLinesWorkflowId,
   (input: WorkflowData<UpdateTaxLinesWorkflowInput>) => {
     const lockKey = transform({ input }, ({ input }) => {
-      return input.cart_id ?? input.cart?.id
+      return input.cart?.id ?? input.cart_id
     })
 
     // Lock before fetching so the cart is validated after any in-flight
@@ -212,7 +212,7 @@ export const updateTaxLinesWorkflow = createWorkflow(
     })
 
     releaseLockStep({
-      key: cart.id,
+      key: lockKey,
     })
 
     return new WorkflowResponse(void 0, {

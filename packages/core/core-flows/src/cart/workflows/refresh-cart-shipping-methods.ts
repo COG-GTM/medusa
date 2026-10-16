@@ -74,6 +74,14 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
       return input.cart_id ?? input.cart?.id
     })
 
+    // Lock before fetching so the cart is validated after any in-flight
+    // mutation or completion holding the lock has finished.
+    acquireLockStep({
+      key: cartId,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
+    })
+
     const fetchCart = when(
       "fetch-cart",
       { shouldExecute },
@@ -85,6 +93,7 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
         entity: "cart",
         fields: [
           "id",
+          "completed_at",
           "sales_channel_id",
           "currency_code",
           "region_id",
@@ -113,12 +122,6 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
     })
 
     validateCartStep({ cart })
-
-    acquireLockStep({
-      key: cart.id,
-      timeout: CART_LOCK_TIMEOUT,
-      ttl: CART_LOCK_TTL,
-    })
 
     const listShippingOptionsInput = transform({ cart }, ({ cart }) =>
       (cart.shipping_methods || [])
@@ -243,7 +246,7 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
       )
 
       releaseLockStep({
-        key: cart.id,
+        key: cartId,
       })
     })
 

@@ -3,6 +3,8 @@ import {
   completeCartWorkflow,
   createPaymentCollectionForCartWorkflow,
   createPaymentSessionsWorkflow,
+  refreshCartShippingMethodsWorkflow,
+  refreshPaymentCollectionForCartWorkflow,
   updateCartWorkflow,
   updateTaxLinesWorkflow,
 } from "@medusajs/core-flows"
@@ -194,6 +196,44 @@ medusaIntegrationTestRunner({
           `Cart ${cart.id} is already completed.`
         )
       })
+
+      it.each([
+        ["payment collection refresh", refreshPaymentCollectionForCartWorkflow],
+        ["shipping methods refresh", refreshCartShippingMethodsWorkflow],
+      ])(
+        "should serialize a %s behind an in-flight cart completion and reject the completed cart",
+        async (_, workflow: any) => {
+          const cart = await createCompletableCart()
+
+          const { locked, handler } = holdLockInHook()
+          onCompletionValidate = handler
+
+          const completion = completeCartWorkflow(appContainer).run({
+            input: { id: cart.id },
+          })
+
+          await locked
+
+          const refreshError = await workflow(appContainer)
+            .run({ input: { cart_id: cart.id } })
+            .then(() => undefined)
+            .catch((e) => e)
+
+          const { result: order } = await completion
+
+          expect(order.id).toEqual(expect.any(String))
+          expect(refreshError?.message).toEqual(
+            `Cart ${cart.id} is already completed.`
+          )
+
+          const [paymentCollection] =
+            await paymentModule.listPaymentCollections(
+              {},
+              { relations: ["payment_sessions"] }
+            )
+          expect(paymentCollection.payment_sessions).toHaveLength(1)
+        }
+      )
 
       it("should complete a cart while a tax recalculation is in-flight and both succeed", async () => {
         const cart = await createCompletableCart()
