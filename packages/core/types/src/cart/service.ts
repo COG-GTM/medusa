@@ -303,6 +303,21 @@ export interface ICartModuleService extends IModuleService {
   ): Promise<CartDTO[]>
 
   /**
+   * This method atomically marks a cart as completed by setting its `completed_at`,
+   * only if the cart hasn't been completed yet. Use it to guarantee that a cart is
+   * completed at most once, even when multiple completions race.
+   *
+   * @param {string} cartId - The cart's ID.
+   * @param {Context} sharedContext - A context used to share resources, such as transaction manager, between the application and the module.
+   * @returns {Promise<boolean>} Whether the cart was marked as completed by this call. `false` means the cart
+   * doesn't exist or was already completed.
+   *
+   * @example
+   * const isMarked = await cartModuleService.markCartAsCompleted("cart_123")
+   */
+  markCartAsCompleted(cartId: string, sharedContext?: Context): Promise<boolean>
+
+  /**
    * This method deletes carts by their IDs.
    *
    * @param {string[]} cartIds - The list of cart IDs.

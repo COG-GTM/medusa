@@ -34,6 +34,7 @@ import { createOrdersStep } from "../../order/steps/create-orders"
 import { authorizePaymentSessionStep } from "../../payment/steps/authorize-payment-session"
 import { registerUsageStep } from "../../promotion/steps/register-usage"
 import {
+  markCartAsCompletedStep,
   updateCartsStep,
   validateCartItemsStep,
   validateCartPaymentsStep,
@@ -538,6 +539,11 @@ export const completeCartWorkflow = createWorkflow(
           credit_lines: creditLines,
         }
       })
+
+      // Atomically claims the cart so that, if the cart lock doesn't serialize
+      // concurrent completions (e.g. a per-instance in-memory lock), only one
+      // of them can create an order.
+      markCartAsCompletedStep({ id: input.id })
 
       const createdOrders = createOrdersStep([cartToOrder])
 

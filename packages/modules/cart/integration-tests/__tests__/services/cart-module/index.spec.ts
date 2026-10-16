@@ -305,6 +305,33 @@ moduleIntegrationTestRunner<ICartModuleService>({
         })
       })
 
+      describe("markCartAsCompleted", () => {
+        it("should mark a cart as completed only once", async () => {
+          const [createdCart] = await service.createCarts([
+            {
+              currency_code: "eur",
+            },
+          ])
+
+          const results = await Promise.all([
+            service.markCartAsCompleted(createdCart.id),
+            service.markCartAsCompleted(createdCart.id),
+          ])
+
+          expect(results.filter(Boolean)).toHaveLength(1)
+          expect(await service.markCartAsCompleted(createdCart.id)).toBe(false)
+
+          const cart = await service.retrieveCart(createdCart.id)
+          expect(cart.completed_at).toBeInstanceOf(Date)
+        })
+
+        it("should return false if the cart does not exist", async () => {
+          expect(await service.markCartAsCompleted("none-existing")).toBe(
+            false
+          )
+        })
+      })
+
       describe("update", () => {
         it("should throw an error if cart does not exist", async () => {
           const error = await service

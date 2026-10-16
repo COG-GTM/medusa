@@ -34,6 +34,7 @@ import {
 } from "@medusajs/types"
 import {
   ContainerRegistrationKeys,
+  MedusaError,
   Modules,
   PaymentCollectionStatus,
   ProductStatus,
@@ -1078,6 +1079,195 @@ medusaIntegrationTestRunner({
           expect(fullOrder.payment_collections[0].authorized_amount).toBe(3000)
           expect(fullOrder.payment_collections[0].captured_amount).toBe(3000)
           expect(fullOrder.payment_collections[0].status).toBe("completed")
+        })
+
+        describe("concurrent completion without a shared lock", () => {
+          const prepareCart = async ({ unitPrice }: { unitPrice: number }) => {
+            const salesChannel = await scModuleService.createSalesChannels({
+              name: "Webshop",
+            })
+
+            const location = await stockLocationModule.createStockLocations({
+              name: "Warehouse",
+            })
+
+            const [product] = await productModule.createProducts([
+              {
+                title: "Test product",
+                status: ProductStatus.PUBLISHED,
+                variants: [
+                  {
+                    title: "Test variant",
+                    manage_inventory: false,
+                  },
+                ],
+              },
+            ])
+
+            const priceSet = await pricingModule.createPriceSets({
+              prices: [
+                {
+                  amount: unitPrice,
+                  currency_code: "usd",
+                },
+              ],
+            })
+
+            await remoteLink.create([
+              {
+                [Modules.PRODUCT]: {
+                  variant_id: product.variants[0].id,
+                },
+                [Modules.PRICING]: {
+                  price_set_id: priceSet.id,
+                },
+              },
+              {
+                [Modules.SALES_CHANNEL]: {
+                  sales_channel_id: salesChannel.id,
+                },
+                [Modules.STOCK_LOCATION]: {
+                  stock_location_id: location.id,
+                },
+              },
+            ])
+
+            const cart = await cartModuleService.createCarts({
+              currency_code: "usd",
+              sales_channel_id: salesChannel.id,
+            })
+
+            await addToCartWorkflow(appContainer).run({
+              input: {
+                items: [
+                  {
+                    variant_id: product.variants[0].id,
+                    quantity: 1,
+                    requires_shipping: false,
+                  },
+                ],
+                cart_id: cart.id,
+              },
+            })
+
+            if (unitPrice > 0) {
+              await createPaymentCollectionForCartWorkflow(appContainer).run({
+                input: {
+                  cart_id: cart.id,
+                },
+              })
+
+              const [payCol] = await remoteQuery(
+                remoteQueryObjectFromString({
+                  entryPoint: "cart_payment_collection",
+                  variables: { filters: { cart_id: cart.id } },
+                  fields: ["payment_collection_id"],
+                })
+              )
+
+              await createPaymentSessionsWorkflow(appContainer).run({
+                input: {
+                  payment_collection_id: payCol.payment_collection_id,
+                  provider_id: "pp_system_default",
+                  context: {},
+                  data: {},
+                },
+              })
+            }
+
+            return { cart, salesChannel }
+          }
+
+          // Emulate two server instances racing on the same cart, each holding
+          // its own (in-memory) lock, so the cart lock does not serialize them.
+          const completeConcurrently = async (cartId: string) => {
+            const locking = appContainer.resolve(Modules.LOCKING)
+            const acquireSpy = jest
+              .spyOn(locking, "acquire")
+              .mockResolvedValue(true as any)
+            const releaseSpy = jest
+              .spyOn(locking, "release")
+              .mockResolvedValue(true as any)
+
+            try {
+              return await Promise.all([
+                completeCartWorkflow(appContainer).run({
+                  input: { id: cartId },
+                  throwOnError: false,
+                }),
+                completeCartWorkflow(appContainer).run({
+                  input: { id: cartId },
+                  throwOnError: false,
+                }),
+              ])
+            } finally {
+              acquireSpy.mockRestore()
+              releaseSpy.mockRestore()
+            }
+          }
+
+          const expectSingleOrder = async ({
+            cart,
+            salesChannel,
+            results,
+          }: {
+            cart: { id: string }
+            salesChannel: { id: string }
+            results: any[]
+          }) => {
+            const { data: orderCartLinks } = await query.graph({
+              entity: "order_cart",
+              fields: ["order_id"],
+              filters: { cart_id: cart.id },
+            })
+
+            const { data: orders } = await query.graph({
+              entity: "order",
+              fields: ["id"],
+              filters: { sales_channel_id: salesChannel.id },
+            })
+
+            expect(orderCartLinks).toHaveLength(1)
+            expect(orders).toHaveLength(1)
+            expect(orders[0].id).toBe(orderCartLinks[0].order_id)
+
+            const succeeded = results.filter((r) => !r.errors?.length)
+            const failed = results.filter((r) => r.errors?.length)
+
+            expect(succeeded.length).toBeGreaterThanOrEqual(1)
+            for (const run of succeeded) {
+              expect(run.result.id).toBe(orders[0].id)
+            }
+            for (const run of failed) {
+              expect(run.errors[0].error).toEqual(
+                expect.objectContaining({
+                  type: MedusaError.Types.CONFLICT,
+                  message: `Cart ${cart.id} is already being completed by another request`,
+                })
+              )
+            }
+
+            const completedCart = await cartModuleService.retrieveCart(cart.id)
+            expect(completedCart.completed_at).toBeTruthy()
+          }
+
+          it("should create exactly one order for a zero-total cart completed concurrently", async () => {
+            const { cart, salesChannel } = await prepareCart({ unitPrice: 0 })
+
+            const results = await completeConcurrently(cart.id)
+
+            await expectSingleOrder({ cart, salesChannel, results })
+          })
+
+          it("should create exactly one order for a paid cart completed concurrently and reject the loser with a conflict", async () => {
+            const { cart, salesChannel } = await prepareCart({
+              unitPrice: 3000,
+            })
+
+            const results = await completeConcurrently(cart.id)
+
+            await expectSingleOrder({ cart, salesChannel, results })
+          })
         })
 
         it("should clear events when complete cart fails after emitting events", async () => {
