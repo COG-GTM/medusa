@@ -94,7 +94,9 @@ export const completeCartWorkflowId = "complete-cart"
  * is created without the payment collection being refreshed, the workflow authorizes or captures the payment session's existing amount
  * and records it in the order's transactions as-is.
  *
- * If the cart's total is zero and covered by credit lines, the workflow can complete the cart without a payment session.
+ * The workflow can complete the cart without a payment session only if the cart's credit lines cover the full amount due after promotions,
+ * or if the cart has nothing to pay because its original total is zero (for example, it only has zero-priced items and no shipping costs).
+ * A cart whose total is reduced to zero or less by promotions still requires a payment session.
  *
  * ### Don't Mutate the Cart in Hooks
  *

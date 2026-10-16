@@ -2716,6 +2716,152 @@ medusaIntegrationTestRunner({
             )
           })
 
+          describe("with a zero total driven by promotions", () => {
+            const applyOverDiscountPromotions = async () => {
+              const itemsPromotion = (
+                await api.post(
+                  `/admin/promotions`,
+                  {
+                    code: "OVER_DISCOUNT_ITEMS",
+                    type: PromotionType.STANDARD,
+                    status: PromotionStatus.ACTIVE,
+                    is_automatic: false,
+                    application_method: {
+                      target_type: "items",
+                      type: "fixed",
+                      allocation: "across",
+                      currency_code: "usd",
+                      value: 100000,
+                    },
+                  },
+                  adminHeaders
+                )
+              ).data.promotion
+
+              const shippingPromotion = (
+                await api.post(
+                  `/admin/promotions`,
+                  {
+                    code: "FREE_SHIPPING_FULL",
+                    type: PromotionType.STANDARD,
+                    status: PromotionStatus.ACTIVE,
+                    is_automatic: false,
+                    application_method: {
+                      target_type: "shipping_methods",
+                      type: "percentage",
+                      allocation: "across",
+                      value: 100,
+                    },
+                  },
+                  adminHeaders
+                )
+              ).data.promotion
+
+              await api.post(
+                `/store/carts/${cart.id}/promotions`,
+                { promo_codes: [itemsPromotion.code, shippingPromotion.code] },
+                storeHeaders
+              )
+
+              return (await api.get(`/store/carts/${cart.id}`, storeHeaders))
+                .data.cart
+            }
+
+            it("should not complete the cart without a payment session", async () => {
+              const zeroTotalCart = await applyOverDiscountPromotions()
+
+              expect(zeroTotalCart.total).toBeLessThanOrEqual(0)
+              expect(zeroTotalCart.credit_line_total).toEqual(0)
+              expect(zeroTotalCart.discount_total).toBeGreaterThan(0)
+
+              const response = await api
+                .post(`/store/carts/${cart.id}/complete`, {}, storeHeaders)
+                .catch((e) => e)
+
+              expect(response.response?.status).toEqual(400)
+              expect(response.response.data).toEqual(
+                expect.objectContaining({
+                  type: "invalid_data",
+                  message: "Payment collection has not been initiated for cart",
+                })
+              )
+
+              const cartAfter = (
+                await api.get(`/store/carts/${cart.id}`, storeHeaders)
+              ).data.cart
+              expect(cartAfter.completed_at).toBeNull()
+            })
+
+            it("should not complete the cart with a nominal credit line and no payment session", async () => {
+              await applyOverDiscountPromotions()
+
+              await createCartCreditLinesWorkflow.run({
+                input: [
+                  {
+                    cart_id: cart.id,
+                    amount: 1,
+                    currency_code: "usd",
+                    reference: "test",
+                    reference_id: "test",
+                  },
+                ],
+                container: appContainer,
+              })
+
+              const zeroTotalCart = (
+                await api.get(`/store/carts/${cart.id}`, storeHeaders)
+              ).data.cart
+
+              expect(zeroTotalCart.total).toBeLessThan(0)
+              expect(zeroTotalCart.credit_line_total).toEqual(1)
+
+              const response = await api
+                .post(`/store/carts/${cart.id}/complete`, {}, storeHeaders)
+                .catch((e) => e)
+
+              expect(response.response?.status).toEqual(400)
+              expect(response.response.data).toEqual(
+                expect.objectContaining({
+                  type: "invalid_data",
+                  message: "Payment collection has not been initiated for cart",
+                })
+              )
+            })
+
+            it("should complete the cart when a payment session is provided", async () => {
+              await applyOverDiscountPromotions()
+
+              const paymentCollection = (
+                await api.post(
+                  `/store/payment-collections`,
+                  { cart_id: cart.id },
+                  storeHeaders
+                )
+              ).data.payment_collection
+
+              await api.post(
+                `/store/payment-collections/${paymentCollection.id}/payment-sessions`,
+                { provider_id: "pp_system_default" },
+                storeHeaders
+              )
+
+              const response = await api.post(
+                `/store/carts/${cart.id}/complete`,
+                {},
+                storeHeaders
+              )
+
+              expect(response.status).toEqual(200)
+              expect(response.data.order).toEqual(
+                expect.objectContaining({
+                  id: expect.any(String),
+                  currency_code: "usd",
+                  total: 0,
+                })
+              )
+            })
+          })
+
           it("should fail to complete a cart if that would exceed the promotion limit", async () => {
             const product = (
               await api.post(

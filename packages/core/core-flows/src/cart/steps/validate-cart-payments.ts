@@ -1,5 +1,6 @@
 import type { CartWorkflowDTO } from "@medusajs/framework/types"
 import {
+  isDefined,
   isPresent,
   MathBN,
   MedusaError,
@@ -25,6 +26,10 @@ export const validateCartPaymentsStepId = "validate-cart-payments"
  * be `pending`, `requires_more`, `authorized`, or `captured`, and their payment
  * provider must be enabled in the cart's region. If not valid, the step throws an error.
  *
+ * The step skips the validation only if the cart's credit lines cover the full amount due after
+ * promotions, or if the cart's original total is zero. A cart whose total is reduced to zero or
+ * less by promotions alone still requires a payment session.
+ *
  * :::tip
  *
  * You can use the {@link retrieveCartStep} to retrieve a cart's details.
@@ -45,13 +50,27 @@ export const validateCartPaymentsStep = createStep(
       cart: {
         payment_collection: paymentCollection,
         total,
+        original_total,
         credit_line_total,
         region_id: regionId,
       },
     } = data
 
-    const canSkipPayment =
-      MathBN.convert(credit_line_total).gte(0) && MathBN.convert(total).lte(0)
+    // Amount owed after promotions, before credit lines are applied
+    const amountDueBeforeCreditLines = MathBN.add(total, credit_line_total)
+
+    const isCoveredByCreditLines =
+      MathBN.gt(credit_line_total, 0) &&
+      MathBN.gt(amountDueBeforeCreditLines, 0) &&
+      MathBN.lte(total, 0)
+
+    // Genuinely free carts (e.g. zero-priced items without shipping costs)
+    // have nothing to collect. Carts driven to zero by promotions still
+    // require a payment session.
+    const isNothingOwed =
+      isDefined(original_total) && MathBN.lte(original_total, 0)
+
+    const canSkipPayment = isCoveredByCreditLines || isNothingOwed
 
     if (canSkipPayment) {
       return new StepResponse([])
