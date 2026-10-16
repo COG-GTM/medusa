@@ -997,6 +997,22 @@ export const PaymentEvents = {
    * ```
    */
   REFUNDED: "payment.refunded",
+  /**
+   * Emitted when a payment webhook tried to complete the payment's cart, but the
+   * cart completion failed. The payment processing itself isn't rolled back, so
+   * use this event to alert or to reconcile the cart and its payment.
+   *
+   * @eventPayload
+   * ```ts
+   * {
+   *   cart_id, // The ID of the cart that failed to complete
+   *   payment_session_id, // The ID of the payment session in the webhook
+   *   action, // The webhook action, such as `captured` or `authorized`
+   *   error, // (object) The error's `message`, `name`, and `type`
+   * }
+   * ```
+   */
+  CART_COMPLETION_FAILED: "payment.cart_completion_failed",
 } as const
 
 /**

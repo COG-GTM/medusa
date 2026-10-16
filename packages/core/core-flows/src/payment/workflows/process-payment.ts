@@ -1,7 +1,7 @@
 import type { WebhookActionResult } from "@medusajs/framework/types"
-import { PaymentActions } from "@medusajs/utils"
+import { PaymentActions, PaymentEvents } from "@medusajs/utils"
 import { createWorkflow, transform, when } from "@medusajs/workflows-sdk"
-import { useQueryGraphStep } from "../../common"
+import { emitEventStep, useQueryGraphStep } from "../../common"
 import { authorizePaymentSessionStep } from "../steps"
 import { completeCartAfterPaymentStep } from "../steps/complete-cart-after-payment"
 import { capturePaymentWorkflow } from "./capture-payment"
@@ -24,6 +24,10 @@ export const processPaymentWorkflowId = "process-payment-workflow"
  * You can use this workflow within your own customizations or custom workflows, allowing you
  * to process a payment in your custom flows based on a webhook action.
  *
+ * If completing the payment's cart fails, the payment processing isn't rolled back. Instead, the
+ * workflow emits the `payment.cart_completion_failed` event with the cart's ID and the error, so
+ * that you can alert on it or reconcile the cart and its payment.
+ *
  * @example
  * const { result } = await processPaymentWorkflow(container)
  * .run({
@@ -43,14 +47,6 @@ export const processPaymentWorkflowId = "process-payment-workflow"
 export const processPaymentWorkflow = createWorkflow(
   processPaymentWorkflowId,
   (input: ProcessPaymentWorkflowInput) => {
-    const paymentData = useQueryGraphStep({
-      entity: "payment",
-      fields: ["id"],
-      filters: { payment_session_id: input.data?.session_id },
-    }).config({
-      name: "payment-query",
-    })
-
     const paymentSessionResult = useQueryGraphStep({
       entity: "payment_session",
       fields: ["payment_collection_id"],
@@ -86,6 +82,26 @@ export const processPaymentWorkflow = createWorkflow(
       }
     )
 
+    when("lock-cart-when-available", { cartId }, ({ cartId }) => {
+      return !!cartId
+    }).then(() => {
+      acquireLockStep({
+        key: cartId,
+        timeout: THIRTY_SECONDS,
+        ttl: TWO_MINUTES,
+      })
+    })
+
+    // The payment and order are queried under the cart lock, as a concurrent
+    // cart completion may have created them while waiting for the lock.
+    const paymentData = useQueryGraphStep({
+      entity: "payment",
+      fields: ["id"],
+      filters: { payment_session_id: input.data?.session_id },
+    }).config({
+      name: "payment-query",
+    })
+
     const { data: order } = useQueryGraphStep({
       entity: "order_cart",
       fields: ["id"],
@@ -97,16 +113,6 @@ export const processPaymentWorkflow = createWorkflow(
       },
     }).config({
       name: "cart-order-query",
-    })
-
-    when("lock-cart-when-available", { cartId }, ({ cartId }) => {
-      return !!cartId
-    }).then(() => {
-      acquireLockStep({
-        key: cartId,
-        timeout: THIRTY_SECONDS,
-        ttl: TWO_MINUTES,
-      })
     })
 
     when({ input, paymentData }, ({ input, paymentData }) => {
@@ -215,7 +221,9 @@ export const processPaymentWorkflow = createWorkflow(
       })
     })
 
-    // We release before the completion to prevent dead locks
+    // We release before the completion to prevent dead locks. The complete cart
+    // workflow acquires the same lock and re-checks for an existing order under
+    // it, so a concurrent completion can't place a second order.
     when("release-lock-cart-when-available", { cartId }, ({ cartId }) => {
       return !!cartId
     }).then(() => {
@@ -224,7 +232,7 @@ export const processPaymentWorkflow = createWorkflow(
       })
     })
 
-    when(
+    const cartCompletion = when(
       { input, cartPaymentCollection, order },
       ({ input, cartPaymentCollection, order }) => {
         return (
@@ -234,10 +242,35 @@ export const processPaymentWorkflow = createWorkflow(
         )
       }
     ).then(() => {
-      completeCartAfterPaymentStep({
+      return completeCartAfterPaymentStep({
         cart_id: cartPaymentCollection.data[0].cart_id,
       }).config({
         continueOnPermanentFailure: true, // Continue payment processing even if cart completion fails
+      })
+    })
+
+    when(
+      "cart-completion-failed",
+      { cartCompletion },
+      ({ cartCompletion }) => {
+        return !!cartCompletion?.error
+      }
+    ).then(() => {
+      const cartCompletionFailedData = transform(
+        { input, cartPaymentCollection, cartCompletion },
+        ({ input, cartPaymentCollection, cartCompletion }) => ({
+          cart_id: cartPaymentCollection.data[0].cart_id,
+          payment_session_id: input.data!.session_id,
+          action: input.action,
+          error: cartCompletion!.error,
+        })
+      )
+
+      emitEventStep({
+        eventName: PaymentEvents.CART_COMPLETION_FAILED,
+        data: cartCompletionFailedData,
+      }).config({
+        name: "emit-cart-completion-failed",
       })
     })
   }
