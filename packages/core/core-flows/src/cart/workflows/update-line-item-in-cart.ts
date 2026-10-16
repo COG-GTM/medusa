@@ -31,6 +31,7 @@ import { emitEventStep } from "../../common/steps/emit-event"
 import { deleteLineItemsWorkflow } from "../../line-item"
 import { updateLineItemsStepWithSelector } from "../../line-item/steps"
 import { acquireLockStep, releaseLockStep } from "../../locking"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import { validateCartStep } from "../steps/validate-cart"
 import { validateVariantPricesStep } from "../steps/validate-variant-prices"
 import {
@@ -219,8 +220,8 @@ export const updateLineItemInCartWorkflow = createWorkflow(
   ) => {
     acquireLockStep({
       key: input.cart_id,
-      timeout: 2,
-      ttl: 10,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
     })
 
     const { data: cart } = useQueryGraphStep({

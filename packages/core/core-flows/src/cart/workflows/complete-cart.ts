@@ -41,6 +41,7 @@ import {
 } from "../steps"
 import { compensatePaymentIfNeededStep } from "../steps/compensate-payment-if-needed"
 import { reserveInventoryStep } from "../steps/reserve-inventory"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import { completeCartFields } from "../utils/fields"
 import { prepareConfirmInventoryInput } from "../utils/prepare-confirm-inventory-input"
 import {
@@ -67,8 +68,6 @@ export type CompleteCartWorkflowOutput = {
 }
 
 const THREE_DAYS = 60 * 60 * 24 * 3
-const THIRTY_SECONDS = 30
-const TWO_MINUTES = 60 * 2
 
 export const completeCartWorkflowId = "complete-cart"
 /**
@@ -361,8 +360,8 @@ export const completeCartWorkflow = createWorkflow(
   (input: WorkflowData<CompleteCartWorkflowInput>) => {
     acquireLockStep({
       key: input.id,
-      timeout: THIRTY_SECONDS,
-      ttl: TWO_MINUTES,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
     })
 
     const [orderCart, cartData] = parallelize(

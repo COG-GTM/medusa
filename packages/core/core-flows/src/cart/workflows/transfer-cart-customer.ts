@@ -11,6 +11,7 @@ import {
 import { AdditionalData } from "@medusajs/types"
 import { emitEventStep, useQueryGraphStep } from "../../common"
 import { acquireLockStep, releaseLockStep } from "../../locking"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import { updateCartsStep } from "../steps"
 import { refreshCartItemsWorkflow } from "./refresh-cart-items"
 
@@ -110,8 +111,8 @@ export const transferCartCustomerWorkflow = createWorkflow(
     ).then(() => {
       acquireLockStep({
         key: cart.id,
-        timeout: 2,
-        ttl: 10,
+        timeout: CART_LOCK_TIMEOUT,
+        ttl: CART_LOCK_TTL,
       })
 
       const cartInput = transform({ cart, customer }, ({ cart, customer }) => [

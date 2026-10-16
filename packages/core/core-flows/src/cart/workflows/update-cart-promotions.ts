@@ -10,6 +10,7 @@ import {
 } from "@medusajs/framework/workflows-sdk"
 import { useQueryGraphStep } from "../../common"
 import { acquireLockStep, releaseLockStep } from "../../locking"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import {
   createLineItemAdjustmentsStep,
   createShippingMethodAdjustmentsStep,
@@ -94,8 +95,8 @@ export const updateCartPromotionsWorkflow = createWorkflow(
 
     acquireLockStep({
       key: cartId,
-      timeout: 2,
-      ttl: 10,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
     })
 
     const fetchCart = when("should-fetch-cart", { input }, ({ input }) => {

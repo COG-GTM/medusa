@@ -11,6 +11,7 @@ import {
 import { AdditionalData } from "@medusajs/types"
 import { useQueryGraphStep } from "../../common"
 import { acquireLockStep, releaseLockStep } from "../../locking"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import { removeShippingMethodFromCartStep, validateCartStep } from "../steps"
 import { updateShippingMethodsStep } from "../steps/update-shipping-methods"
 import { listShippingOptionsForCartWithPricingWorkflow } from "./list-shipping-options-for-cart-with-pricing"
@@ -115,8 +116,8 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
 
     acquireLockStep({
       key: cart.id,
-      timeout: 2,
-      ttl: 10,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
     })
 
     const listShippingOptionsInput = transform({ cart }, ({ cart }) =>

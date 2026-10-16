@@ -6,9 +6,7 @@ import { authorizePaymentSessionStep } from "../steps"
 import { completeCartAfterPaymentStep } from "../steps/complete-cart-after-payment"
 import { capturePaymentWorkflow } from "./capture-payment"
 import { acquireLockStep, releaseLockStep } from "../../locking"
-
-const THIRTY_SECONDS = 30
-const TWO_MINUTES = 60 * 2
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../../cart/utils/cart-lock"
 
 /**
  * The data to process a payment from a webhook action.
@@ -104,8 +102,8 @@ export const processPaymentWorkflow = createWorkflow(
     }).then(() => {
       acquireLockStep({
         key: cartId,
-        timeout: THIRTY_SECONDS,
-        ttl: TWO_MINUTES,
+        timeout: CART_LOCK_TIMEOUT,
+        ttl: CART_LOCK_TTL,
       })
     })
 

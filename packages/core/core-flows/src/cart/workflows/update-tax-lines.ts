@@ -14,6 +14,7 @@ import {
 } from "@medusajs/framework/workflows-sdk"
 import { useQueryGraphStep } from "../../common"
 import { acquireLockStep, releaseLockStep } from "../../locking"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import { getItemTaxLinesStep } from "../../tax/steps/get-item-tax-lines"
 import { setTaxLinesForItemsStep, validateCartStep } from "../steps"
 import { getTranslatedTaxLinesStep } from "../../common/steps/get-translated-tax-lines"
@@ -21,6 +22,7 @@ import { taxLineContextResult } from "../utils/schemas"
 
 const cartFields = [
   "id",
+  "completed_at",
   "currency_code",
   "email",
   "locale",
@@ -136,6 +138,18 @@ export const updateTaxLinesWorkflowId = "update-tax-lines"
 export const updateTaxLinesWorkflow = createWorkflow(
   updateTaxLinesWorkflowId,
   (input: WorkflowData<UpdateTaxLinesWorkflowInput>) => {
+    const lockKey = transform({ input }, ({ input }) => {
+      return input.cart_id ?? input.cart?.id
+    })
+
+    // Lock before fetching so the cart is validated after any in-flight
+    // mutation or completion holding the lock has finished.
+    acquireLockStep({
+      key: lockKey,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
+    })
+
     const fetchCart = when("should-fetch-cart", { input }, ({ input }) => {
       return !input.cart
     }).then(() => {
@@ -157,12 +171,6 @@ export const updateTaxLinesWorkflow = createWorkflow(
     })
 
     validateCartStep({ cart })
-
-    acquireLockStep({
-      key: cart.id,
-      timeout: 2,
-      ttl: 10,
-    })
 
     const setTaxLineContext = createHook(
       "setTaxLineContext",
