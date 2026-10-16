@@ -316,6 +316,66 @@ medusaIntegrationTestRunner({
           )
         })
 
+        it("should complete a zero-priced cart without a payment session", async () => {
+          const salesChannel = await scModuleService.createSalesChannels({
+            name: "Webshop",
+          })
+
+          const region = await regionModuleService.createRegions({
+            name: "US",
+            currency_code: "usd",
+          })
+
+          await linkRegionPaymentProviders(appContainer, region.id)
+
+          const cart = await cartModuleService.createCarts({
+            currency_code: "usd",
+            sales_channel_id: salesChannel.id,
+            region_id: region.id,
+          })
+
+          await addToCartWorkflow(appContainer).run({
+            input: {
+              items: [
+                {
+                  title: "zero price item",
+                  subtitle: "zero price item",
+                  thumbnail: "some-url",
+                  requires_shipping: false,
+                  is_discountable: false,
+                  is_tax_inclusive: false,
+                  unit_price: 0,
+                  quantity: 1,
+                },
+              ],
+              cart_id: cart.id,
+            },
+          })
+
+          const { result } = await completeCartWorkflow(appContainer).run({
+            input: {
+              id: cart.id,
+            },
+          })
+
+          const { data } = await query.graph({
+            entity: "cart",
+            filters: {
+              id: cart.id,
+            },
+            fields: ["id", "completed_at", "payment_collection.id"],
+          })
+
+          expect(result.id).toEqual(expect.any(String))
+          expect(data[0]).toEqual(
+            expect.objectContaining({
+              id: cart.id,
+              completed_at: expect.any(Date),
+            })
+          )
+          expect(data[0].payment_collection).toBeFalsy()
+        })
+
         it("should complete cart reserving inventory from available locations", async () => {
           const salesChannel = await scModuleService.createSalesChannels({
             name: "Webshop",

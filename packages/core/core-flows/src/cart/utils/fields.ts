@@ -76,6 +76,7 @@ export const completeCartFields = [
   "tax_total",
   "discount_total",
   "discount_tax_total",
+  "credit_line_total",
   "original_total",
   "original_tax_total",
   "item_total",
