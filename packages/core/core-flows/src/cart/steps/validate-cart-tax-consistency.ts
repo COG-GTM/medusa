@@ -131,7 +131,7 @@ export const validateCartTaxConsistencyStep = createStep(
     // The tax module always prefers a province's default rate over any
     // country-level rate.
     const provinceHasDefaultTaxRate =
-      usesSystemTaxProvider &&
+      !!countryTaxRegion &&
       !!provinceCode &&
       countryTaxRegions.some(
         (taxRegion) =>
@@ -202,8 +202,8 @@ export const validateCartTaxConsistencyStep = createStep(
     // A default rate applies to every item and shipping method, so they must
     // all have tax lines.
     const requiresTaxLines =
-      provinceHasDefaultTaxRate ||
-      (usesSystemTaxProvider && hasDefaultTaxRate(countryTaxRegion!))
+      usesSystemTaxProvider &&
+      (provinceHasDefaultTaxRate || hasDefaultTaxRate(countryTaxRegion!))
 
     if (requiresTaxLines) {
       throw new MedusaError(
