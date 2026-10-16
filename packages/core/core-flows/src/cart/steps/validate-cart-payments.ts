@@ -1,4 +1,4 @@
-import type { CartWorkflowDTO } from "@medusajs/framework/types"
+import type { BigNumberInput, CartWorkflowDTO } from "@medusajs/framework/types"
 import {
   isPresent,
   MathBN,
@@ -17,13 +17,19 @@ export interface ValidateCartPaymentsStepInput {
    * The cart to validate payment sessions for.
    */
   cart: CartWorkflowDTO
+  /**
+   * The ID of the order already created from the cart, if any. When set, the
+   * amount checks are skipped so retries can return the existing order.
+   */
+  order_id?: string
 }
 
 export const validateCartPaymentsStepId = "validate-cart-payments"
 /**
  * This step validates a cart's payment sessions. Their status must
- * be `pending`, `requires_more`, `authorized`, or `captured`, and their payment
- * provider must be enabled in the cart's region. If not valid, the step throws an error.
+ * be `pending`, `requires_more`, `authorized`, or `captured`, their payment
+ * provider must be enabled in the cart's region, and the payment collection and
+ * session amounts must match the cart's total. If not valid, the step throws an error.
  *
  * :::tip
  *
@@ -45,9 +51,11 @@ export const validateCartPaymentsStep = createStep(
       cart: {
         payment_collection: paymentCollection,
         total,
+        raw_total: rawTotal,
         credit_line_total,
         region_id: regionId,
       },
+      order_id: existingOrderId,
     } = data
 
     const canSkipPayment =
@@ -82,6 +90,36 @@ export const validateCartPaymentsStep = createStep(
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Payment sessions are required to complete cart`
+      )
+    }
+
+    // Mirrors the comparison used by refreshPaymentCollectionForCartWorkflow
+    const { raw_amount: collectionRawAmount } = paymentCollection as {
+      raw_amount?: BigNumberInput
+    }
+
+    if (
+      !existingOrderId &&
+      !MathBN.eq(
+        collectionRawAmount ?? paymentCollection.amount,
+        rawTotal ?? total
+      )
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Payment collection ${paymentCollection.id} amount (${paymentCollection.amount}) does not match the cart total (${total}). Refresh the cart's payment collection and payment sessions before completing the cart.`
+      )
+    }
+
+    // Only the first processable session is authorized on completion.
+    // Sessions are created from the collection's numeric amount, so compare
+    // it against the cart's numeric total.
+    const [sessionToAuthorize] = paymentsToProcess
+
+    if (!existingOrderId && !MathBN.eq(sessionToAuthorize.amount, total)) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Payment session ${sessionToAuthorize.id} amount (${sessionToAuthorize.amount}) does not match the cart total (${total}). Refresh the cart's payment sessions before completing the cart.`
       )
     }
 
