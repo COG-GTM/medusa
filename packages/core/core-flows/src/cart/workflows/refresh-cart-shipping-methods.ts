@@ -11,6 +11,7 @@ import {
 import { AdditionalData } from "@medusajs/types"
 import { useQueryGraphStep } from "../../common"
 import { acquireLockStep, releaseLockStep } from "../../locking"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import { removeShippingMethodFromCartStep, validateCartStep } from "../steps"
 import { updateShippingMethodsStep } from "../steps/update-shipping-methods"
 import { listShippingOptionsForCartWithPricingWorkflow } from "./list-shipping-options-for-cart-with-pricing"
@@ -73,6 +74,14 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
       return input.cart_id ?? input.cart?.id
     })
 
+    // Lock before fetching so the cart is validated after any in-flight
+    // mutation or completion holding the lock has finished.
+    acquireLockStep({
+      key: cartId,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
+    })
+
     const fetchCart = when(
       "fetch-cart",
       { shouldExecute },
@@ -84,6 +93,7 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
         entity: "cart",
         fields: [
           "id",
+          "completed_at",
           "sales_channel_id",
           "currency_code",
           "region_id",
@@ -112,12 +122,6 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
     })
 
     validateCartStep({ cart })
-
-    acquireLockStep({
-      key: cart.id,
-      timeout: 2,
-      ttl: 10,
-    })
 
     const listShippingOptionsInput = transform({ cart }, ({ cart }) =>
       (cart.shipping_methods || [])
@@ -242,7 +246,7 @@ export const refreshCartShippingMethodsWorkflow = createWorkflow(
       )
 
       releaseLockStep({
-        key: cart.id,
+        key: cartId,
       })
     })
 

@@ -15,6 +15,7 @@ import {
 import { createRemoteLinkStep } from "../../common/steps/create-remote-links"
 import { useRemoteQueryStep } from "../../common/steps/use-remote-query"
 import { acquireLockStep, releaseLockStep } from "../../locking"
+import { CART_LOCK_TIMEOUT, CART_LOCK_TTL } from "../utils/cart-lock"
 import { createPaymentCollectionsStep } from "../steps/create-payment-collection"
 import { validateCartStep } from "../steps/validate-cart"
 
@@ -91,8 +92,8 @@ export const createPaymentCollectionForCartWorkflow = createWorkflow(
   ): WorkflowResponse<PaymentCollectionDTO> => {
     acquireLockStep({
       key: input.cart_id,
-      timeout: 2,
-      ttl: 10,
+      timeout: CART_LOCK_TIMEOUT,
+      ttl: CART_LOCK_TTL,
     })
 
     const cart = useRemoteQueryStep({
