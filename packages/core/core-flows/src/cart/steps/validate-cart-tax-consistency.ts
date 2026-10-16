@@ -26,11 +26,13 @@ export const validateCartTaxConsistencyStepId = "validate-cart-tax-consistency"
  * This step validates that a cart's shipping address and tax lines are consistent
  * with its region before the cart is completed. It throws an error if:
  *
- * - The shipping address's country doesn't belong to the cart's region.
+ * - The cart's region has countries and the shipping address's country isn't one of them.
  * - A tax line of an item or shipping method was calculated from a tax rate whose tax region
  * doesn't match the shipping address's country or province, meaning the tax lines are stale.
+ * - A tax line was calculated from a country-level rate, but the shipping address's province has a
+ * default tax rate, which takes precedence.
  * - The region has automatic taxes enabled, the shipping address resolves to a tax region with a
- * default tax rate, and an item has no tax lines.
+ * default tax rate, and an item (other than a gift card) or shipping method has no tax lines.
  *
  * If the cart has no shipping address country, the step doesn't perform any validation.
  *
@@ -77,28 +79,57 @@ export const validateCartTaxConsistencyStep = createStep(
       return new StepResponse(void 0)
     }
 
-    const countryInRegion = (region.countries ?? []).some(
-      (country) => normalizeCode(country?.iso_2) === countryCode
+    const regionCountries = (region.countries ?? []).map((country) =>
+      normalizeCode(country?.iso_2)
     )
 
-    if (!countryInRegion) {
+    // A region without countries doesn't restrict the shipping address.
+    if (regionCountries.length && !regionCountries.includes(countryCode)) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Country with code ${countryCode} is not within region ${region.name}`
       )
     }
 
-    const taxLines = [
-      ...(cart.items ?? []).flatMap((item) => item.tax_lines ?? []),
-      ...(cart.shipping_methods ?? []).flatMap((sm) => sm.tax_lines ?? []),
+    const taxLineOwners: {
+      id: string
+      tax_lines?: { tax_rate_id?: string | null }[]
+    }[] = [
+      ...(cart.items ?? []).filter((item) => !item.is_giftcard),
+      ...(cart.shipping_methods ?? []),
     ]
     const taxRateIds = [
       ...new Set(
-        taxLines
+        taxLineOwners
+          .flatMap((owner) => owner.tax_lines ?? [])
           .map((taxLine) => taxLine.tax_rate_id)
           .filter((id): id is string => !!id)
       ),
     ]
+
+    const { data: countryTaxRegions } = await query.graph({
+      entity: "tax_region",
+      fields: ["id", "province_code", "tax_rates.is_default"],
+      filters: { country_code: countryCode },
+    })
+
+    const hasDefaultTaxRate = (taxRegion: (typeof countryTaxRegions)[0]) =>
+      (taxRegion.tax_rates ?? []).some((taxRate) => taxRate?.is_default)
+
+    // The tax module always prefers a province's default rate over any
+    // country-level rate.
+    const provinceHasDefaultTaxRate =
+      !!provinceCode &&
+      countryTaxRegions.some(
+        (taxRegion) =>
+          normalizeCode(taxRegion.province_code) === provinceCode &&
+          hasDefaultTaxRate(taxRegion)
+      )
+
+    const staleTaxLinesError = new MedusaError(
+      MedusaError.Types.INVALID_DATA,
+      `The tax lines of cart ${cart.id} don't match its shipping address (${addressDescription}). Recalculate the cart's taxes before completing it.`
+    )
 
     if (taxRateIds.length) {
       const { data: taxRates } = await query.graph({
@@ -107,24 +138,39 @@ export const validateCartTaxConsistencyStep = createStep(
         filters: { id: taxRateIds },
       })
 
-      const hasStaleTaxLines = taxRates.some((taxRate) => {
-        const taxRegion = taxRate.tax_region
-        if (!taxRegion) {
-          return false
+      const taxRateRegions = new Map(
+        taxRates
+          .filter((taxRate) => !!taxRate.tax_region)
+          .map((taxRate) => [
+            taxRate.id,
+            {
+              country: normalizeCode(taxRate.tax_region.country_code),
+              province: normalizeCode(taxRate.tax_region.province_code),
+            },
+          ])
+      )
+
+      for (const owner of taxLineOwners) {
+        const rateRegions = (owner.tax_lines ?? [])
+          .map((taxLine) => taxRateRegions.get(taxLine.tax_rate_id!))
+          .filter((rateRegion) => !!rateRegion)
+
+        if (!rateRegions.length) {
+          continue
         }
 
-        const rateProvince = normalizeCode(taxRegion.province_code)
-        return (
-          normalizeCode(taxRegion.country_code) !== countryCode ||
-          (!!rateProvince && rateProvince !== provinceCode)
+        const hasMismatchingRate = rateRegions.some(
+          (rateRegion) =>
+            rateRegion.country !== countryCode ||
+            (!!rateRegion.province && rateRegion.province !== provinceCode)
         )
-      })
+        const isMissingProvinceRate =
+          provinceHasDefaultTaxRate &&
+          !rateRegions.some((rateRegion) => !!rateRegion.province)
 
-      if (hasStaleTaxLines) {
-        throw new MedusaError(
-          MedusaError.Types.INVALID_DATA,
-          `The tax lines of cart ${cart.id} don't match its shipping address (${addressDescription}). Recalculate the cart's taxes before completing it.`
-        )
+        if (hasMismatchingRate || isMissingProvinceRate) {
+          throw staleTaxLinesError
+        }
       }
     }
 
@@ -132,38 +178,27 @@ export const validateCartTaxConsistencyStep = createStep(
       return new StepResponse(void 0)
     }
 
-    const itemsWithoutTaxLines = (cart.items ?? []).filter(
-      (item) => !item.tax_lines?.length
+    const ownersWithoutTaxLines = taxLineOwners.filter(
+      (owner) => !owner.tax_lines?.length
     )
 
-    if (!itemsWithoutTaxLines.length) {
+    if (!ownersWithoutTaxLines.length) {
       return new StepResponse(void 0)
     }
 
-    const { data: countryTaxRegions } = await query.graph({
-      entity: "tax_region",
-      fields: ["id", "province_code", "tax_rates.is_default"],
-      filters: { country_code: countryCode },
-    })
+    // A default rate applies to every item and shipping method, so they must
+    // all have tax lines.
+    const requiresTaxLines =
+      provinceHasDefaultTaxRate ||
+      countryTaxRegions.some(
+        (taxRegion) => !taxRegion.province_code && hasDefaultTaxRate(taxRegion)
+      )
 
-    const taxRegions = countryTaxRegions.filter((taxRegion) => {
-      const regionProvince = normalizeCode(taxRegion.province_code)
-      return !regionProvince || regionProvince === provinceCode
-    })
-
-    if (!taxRegions.some((taxRegion) => !taxRegion.province_code)) {
-      return new StepResponse(void 0)
-    }
-
-    const hasDefaultTaxRate = taxRegions.some((taxRegion) =>
-      (taxRegion.tax_rates ?? []).some((taxRate) => taxRate?.is_default)
-    )
-
-    if (hasDefaultTaxRate) {
+    if (requiresTaxLines) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
-        `The line items ${itemsWithoutTaxLines
-          .map((item) => item.id)
+        `The line items or shipping methods ${ownersWithoutTaxLines
+          .map((owner) => owner.id)
           .join(", ")} of cart ${
           cart.id
         } are missing tax lines required for its shipping address (${addressDescription}). Recalculate the cart's taxes before completing it.`

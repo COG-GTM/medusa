@@ -3133,6 +3133,66 @@ medusaIntegrationTestRunner({
               })
             })
 
+            it("should fail to complete the cart when its country-level tax lines are superseded by the shipping address province's default rate", async () => {
+              const cartModule = appContainer.resolve(Modules.CART)
+              const cartBefore = await retrieveCartWithTaxLines(cart.id)
+
+              await cartModule.updateAddresses({
+                id: cartBefore.shipping_address!.id,
+                province: null,
+              })
+              await api.post(`/store/carts/${cart.id}/taxes`, {}, storeHeaders)
+
+              expect(
+                (await retrieveCartWithTaxLines(cart.id)).items![0].tax_lines
+              ).toEqual([expect.objectContaining({ code: "US_DEF", rate: 2 })])
+
+              // Moves the address into California, whose default rate takes
+              // precedence over the US default rate, without recalculating.
+              await cartModule.updateAddresses({
+                id: cartBefore.shipping_address!.id,
+                province: "CA",
+              })
+
+              await initiatePayment(cart.id)
+
+              const response = await api
+                .post(`/store/carts/${cart.id}/complete`, {}, storeHeaders)
+                .catch((e) => e)
+
+              expect(response.response.status).toEqual(400)
+              expect(response.response.data).toEqual({
+                type: "invalid_data",
+                message: `The tax lines of cart ${cart.id} don't match its shipping address (country: us, province: ca). Recalculate the cart's taxes before completing it.`,
+              })
+            })
+
+            it("should fail to complete the cart when shipping methods are missing tax lines required by the shipping address's tax region", async () => {
+              const cartModule = appContainer.resolve(Modules.CART)
+              const cartBefore = await cartModule.retrieveCart(cart.id, {
+                relations: ["shipping_methods.tax_lines"],
+              })
+              const shippingMethod = cartBefore.shipping_methods![0]
+
+              expect(shippingMethod.tax_lines).toEqual([
+                expect.objectContaining({ code: "CADEFAULT", rate: 5 }),
+              ])
+
+              await cartModule.setShippingMethodTaxLines(cart.id, [])
+
+              await initiatePayment(cart.id)
+
+              const response = await api
+                .post(`/store/carts/${cart.id}/complete`, {}, storeHeaders)
+                .catch((e) => e)
+
+              expect(response.response.status).toEqual(400)
+              expect(response.response.data).toEqual({
+                type: "invalid_data",
+                message: `The line items or shipping methods ${shippingMethod.id} of cart ${cart.id} are missing tax lines required for its shipping address (country: us, province: ca). Recalculate the cart's taxes before completing it.`,
+              })
+            })
+
             it("should fail to complete the cart when items are missing tax lines required by the shipping address's tax region", async () => {
               const cartModule = appContainer.resolve(Modules.CART)
               const cartBefore = await retrieveCartWithTaxLines(cart.id)
@@ -3148,7 +3208,9 @@ medusaIntegrationTestRunner({
               expect(response.response.status).toEqual(400)
               expect(response.response.data).toEqual({
                 type: "invalid_data",
-                message: `The line items ${cartBefore.items![0].id} of cart ${
+                message: `The line items or shipping methods ${
+                  cartBefore.items![0].id
+                } of cart ${
                   cart.id
                 } are missing tax lines required for its shipping address (country: us, province: ca). Recalculate the cart's taxes before completing it.`,
               })
