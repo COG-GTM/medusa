@@ -4,9 +4,11 @@ import {
   updateCartsStep,
   updateCartPromotionsWorkflow,
   createProductsWorkflow,
+  processPaymentWorkflow,
 } from "@medusajs/core-flows"
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import {
+  ContainerRegistrationKeys,
   Modules,
   PaymentSessionStatus,
   PriceListStatus,
@@ -2613,6 +2615,76 @@ medusaIntegrationTestRunner({
                 ]),
               })
             )
+          })
+
+          it("should place exactly one order when the store complete route and the captured payment webhook run concurrently", async () => {
+            const query = appContainer.resolve(ContainerRegistrationKeys.QUERY)
+            const eventBus = appContainer.resolve(Modules.EVENT_BUS)
+
+            const paymentCollection = (
+              await api.post(
+                `/store/payment-collections`,
+                { cart_id: cart.id },
+                storeHeaders
+              )
+            ).data.payment_collection
+
+            const paymentSession = await api
+              .post(
+                `/store/payment-collections/${paymentCollection.id}/payment-sessions`,
+                { provider_id: "pp_system_default" },
+                storeHeaders
+              )
+              .then((res) => res.data.payment_collection.payment_sessions[0])
+
+            const completionFailedSubscriber = jest.fn()
+            eventBus.subscribe(
+              "payment.cart_completion_failed",
+              completionFailedSubscriber,
+              { subscriberId: "test-concurrent-completion-subscriber" }
+            )
+
+            const [completeResponse, webhookRun] = await Promise.all([
+              api.post(`/store/carts/${cart.id}/complete`, {}, storeHeaders),
+              processPaymentWorkflow(appContainer).run({
+                input: {
+                  action: "captured",
+                  data: {
+                    session_id: paymentSession.id,
+                    amount: paymentSession.amount,
+                  },
+                },
+                throwOnError: false,
+              }),
+            ])
+
+            await setTimeout(200)
+
+            expect(webhookRun.errors ?? []).toHaveLength(0)
+            expect(completeResponse.status).toEqual(200)
+            expect(completeResponse.data.type).toEqual("order")
+
+            const { data: orderCarts } = await query.graph({
+              entity: "order_cart",
+              fields: ["order_id"],
+              filters: { cart_id: cart.id },
+            })
+
+            expect(orderCarts).toHaveLength(1)
+            expect(orderCarts[0].order_id).toEqual(
+              completeResponse.data.order.id
+            )
+            expect(completionFailedSubscriber).not.toHaveBeenCalled()
+
+            const { data: payments } = await query.graph({
+              entity: "payment",
+              fields: ["id", "captures.amount", "refunds.id"],
+              filters: { payment_session_id: paymentSession.id },
+            })
+
+            expect(payments).toHaveLength(1)
+            expect(payments[0].captures).toHaveLength(1)
+            expect(payments[0].refunds).toHaveLength(0)
           })
 
           it("should successfully complete cart with credit lines alone", async () => {

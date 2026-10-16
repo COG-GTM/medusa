@@ -16,6 +16,7 @@ import {
   createStep,
   createWorkflow,
   WorkflowData,
+  WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
 import { medusaIntegrationTestRunner } from "@medusajs/test-utils"
 import {
@@ -1078,6 +1079,243 @@ medusaIntegrationTestRunner({
           expect(fullOrder.payment_collections[0].authorized_amount).toBe(3000)
           expect(fullOrder.payment_collections[0].captured_amount).toBe(3000)
           expect(fullOrder.payment_collections[0].status).toBe("completed")
+        })
+
+        describe("processPaymentWorkflow and cart completion race", () => {
+          const CART_COMPLETION_FAILED_EVENT = "payment.cart_completion_failed"
+
+          const prepareCartWithPaymentSession = async ({
+            requiresShipping = false,
+          }: { requiresShipping?: boolean } = {}) => {
+            const salesChannel = await scModuleService.createSalesChannels({
+              name: "Webshop",
+            })
+
+            const location = await stockLocationModule.createStockLocations({
+              name: "Warehouse",
+            })
+
+            const [product] = await productModule.createProducts([
+              {
+                title: "Test product",
+                status: ProductStatus.PUBLISHED,
+                variants: [
+                  {
+                    title: "Test variant",
+                    manage_inventory: false,
+                  },
+                ],
+              },
+            ])
+
+            const priceSet = await pricingModule.createPriceSets({
+              prices: [
+                {
+                  amount: 3000,
+                  currency_code: "usd",
+                },
+              ],
+            })
+
+            await remoteLink.create([
+              {
+                [Modules.PRODUCT]: {
+                  variant_id: product.variants[0].id,
+                },
+                [Modules.PRICING]: {
+                  price_set_id: priceSet.id,
+                },
+              },
+              {
+                [Modules.SALES_CHANNEL]: {
+                  sales_channel_id: salesChannel.id,
+                },
+                [Modules.STOCK_LOCATION]: {
+                  stock_location_id: location.id,
+                },
+              },
+            ])
+
+            const cart = await cartModuleService.createCarts({
+              currency_code: "usd",
+              sales_channel_id: salesChannel.id,
+            })
+
+            await addToCartWorkflow(appContainer).run({
+              input: {
+                items: [
+                  {
+                    variant_id: product.variants[0].id,
+                    quantity: 1,
+                    requires_shipping: requiresShipping,
+                  },
+                ],
+                cart_id: cart.id,
+              },
+            })
+
+            await createPaymentCollectionForCartWorkflow(appContainer).run({
+              input: {
+                cart_id: cart.id,
+              },
+            })
+
+            const [payCol] = await remoteQuery(
+              remoteQueryObjectFromString({
+                entryPoint: "cart_payment_collection",
+                variables: { filters: { cart_id: cart.id } },
+                fields: ["payment_collection_id"],
+              })
+            )
+
+            const { result: paymentSession } =
+              await createPaymentSessionsWorkflow(appContainer).run({
+                input: {
+                  payment_collection_id: payCol.payment_collection_id,
+                  provider_id: "pp_system_default",
+                  context: {},
+                  data: {},
+                },
+              })
+
+            return { cart, paymentSession }
+          }
+
+          const listOrderCarts = async (cartId: string) => {
+            const { data } = await query.graph({
+              entity: "order_cart",
+              fields: ["order_id", "cart_id"],
+              filters: { cart_id: cartId },
+            })
+
+            return data
+          }
+
+          it("should emit a cart completion failed event instead of silently swallowing a failed webhook-triggered completion", async () => {
+            // The item requires shipping but no shipping method is set, so
+            // the completion triggered by the webhook fails validation.
+            const { cart, paymentSession } =
+              await prepareCartWithPaymentSession({ requiresShipping: true })
+
+            const failedEvents: any[] = []
+            const subscriber = async (event) => {
+              failedEvents.push(event)
+            }
+            eventBus.subscribe(CART_COMPLETION_FAILED_EVENT, subscriber, {
+              subscriberId: "test-cart-completion-failed-subscriber",
+            })
+
+            const { errors } = await processPaymentWorkflow(appContainer).run({
+              input: {
+                action: "captured",
+                data: {
+                  session_id: paymentSession.id,
+                  amount: 3000,
+                },
+              },
+              throwOnError: false,
+            })
+
+            await new Promise((resolve) => setTimeout(resolve, 200))
+
+            expect(errors ?? []).toHaveLength(0)
+            expect(await listOrderCarts(cart.id)).toHaveLength(0)
+
+            expect(failedEvents).toHaveLength(1)
+            expect(failedEvents[0]).toEqual(
+              expect.objectContaining({
+                name: CART_COMPLETION_FAILED_EVENT,
+                data: expect.objectContaining({
+                  cart_id: cart.id,
+                  payment_session_id: paymentSession.id,
+                  action: "captured",
+                  error: expect.objectContaining({
+                    message: expect.stringContaining("shipping"),
+                  }),
+                }),
+              })
+            )
+          })
+
+          it("should re-check for an existing order under the cart lock before completing the cart from the webhook", async () => {
+            const { cart, paymentSession } =
+              await prepareCartWithPaymentSession()
+
+            const locking = appContainer.resolve(Modules.LOCKING)
+            const eventSubscriber = jest.fn()
+            eventBus.subscribe(CART_COMPLETION_FAILED_EVENT, eventSubscriber, {
+              subscriberId: "test-cart-completion-race-subscriber",
+            })
+
+            // Simulates a storefront completion holding the cart lock while
+            // the webhook arrives.
+            await locking.acquire(cart.id)
+
+            let completeCartCalled: boolean | undefined
+            const webhookWorkflow = processPaymentWorkflow(appContainer)
+            webhookWorkflow.addAction("track-complete-cart-step", {
+              invoke: async function trackStep({ invoke }) {
+                completeCartCalled =
+                  !!invoke["complete-cart-after-payment-step"]
+              },
+            })
+
+            const webhookRun = webhookWorkflow.run({
+              input: {
+                action: "captured",
+                data: {
+                  session_id: paymentSession.id,
+                  amount: 3000,
+                },
+              },
+              throwOnError: false,
+            })
+
+            // Let the webhook reach the cart lock
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+
+            // The storefront completion places the order while holding the
+            // lock (run as a sub workflow so it doesn't re-acquire it).
+            const storefrontCompletion = createWorkflow(
+              "test-complete-cart-holding-lock",
+              (input: WorkflowData<{ id: string }>) => {
+                return new WorkflowResponse(
+                  completeCartWorkflow.runAsStep({ input: { id: input.id } })
+                )
+              }
+            )
+
+            const { result: order } = await storefrontCompletion(
+              appContainer
+            ).run({
+              input: { id: cart.id },
+            })
+
+            await locking.release(cart.id)
+
+            const { errors } = await webhookRun
+
+            await new Promise((resolve) => setTimeout(resolve, 200))
+
+            expect(errors ?? []).toHaveLength(0)
+            expect(completeCartCalled).toBe(false)
+            expect(eventSubscriber).not.toHaveBeenCalled()
+
+            const orderCarts = await listOrderCarts(cart.id)
+            expect(orderCarts).toHaveLength(1)
+            expect(orderCarts[0].order_id).toBe(order.id)
+
+            const { result: fullOrder } = await getOrderDetailWorkflow(
+              appContainer
+            ).run({
+              input: {
+                fields: ["*"],
+                order_id: order.id,
+              },
+            })
+
+            expect(fullOrder.payment_collections[0].captured_amount).toBe(3000)
+          })
         })
 
         it("should clear events when complete cart fails after emitting events", async () => {
