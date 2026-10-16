@@ -21,9 +21,10 @@ export interface ValidateCartPaymentsStepInput {
 
 export const validateCartPaymentsStepId = "validate-cart-payments"
 /**
- * This step validates a cart's payment sessions. Their status must
- * be `pending`, `requires_more`, `authorized`, or `captured`, and their payment
- * provider must be enabled in the cart's region. If not valid, the step throws an error.
+ * This step validates a cart's payment sessions. Exactly one session must have
+ * a processable status (`pending`, `requires_more`, `authorized`, `captured`, or
+ * `pending_authorization`), and its payment provider must be enabled in the cart's
+ * region. If not valid, the step throws an error.
  *
  * :::tip
  *
@@ -82,6 +83,20 @@ export const validateCartPaymentsStep = createStep(
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Payment sessions are required to complete cart`
+      )
+    }
+
+    // Cart completion authorizes exactly one payment session. Authorizing more
+    // than one could charge the customer multiple times, so we reject the cart
+    // instead of silently picking one.
+    if (paymentsToProcess.length > 1) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Cart ${
+          data.cart.id
+        } has more than one processable payment session (${paymentsToProcess
+          .map((ps) => ps.id)
+          .join(", ")}). Only one payment session can be authorized per cart.`
       )
     }
 
