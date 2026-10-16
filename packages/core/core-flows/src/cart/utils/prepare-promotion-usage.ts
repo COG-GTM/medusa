@@ -42,7 +42,7 @@ export function preparePromotionUsageComputedActions(
       continue
     }
 
-    existing.amount = MathBN.add(existing.amount, adjustment.amount).toNumber()
+    existing.amount = MathBN.add(existing.amount, adjustment.amount)
   }
 
   return Array.from(usageByCode.values())

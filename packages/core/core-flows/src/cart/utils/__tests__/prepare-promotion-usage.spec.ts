@@ -1,3 +1,4 @@
+import { MathBN } from "@medusajs/framework/utils"
 import { preparePromotionUsageComputedActions } from "../prepare-promotion-usage"
 
 describe("preparePromotionUsageComputedActions", () => {
@@ -49,11 +50,30 @@ describe("preparePromotionUsageComputedActions", () => {
       ],
     } as any)
 
-    expect(result).toEqual([
+    expect(
+      result.map((action) => ({
+        code: action.code,
+        amount: MathBN.convert(action.amount).toNumber(),
+      }))
+    ).toEqual([
       { code: "PROMO", amount: 162.5 },
       { code: "OTHER", amount: 7 },
       { code: "SHIP", amount: 3 },
     ])
+  })
+
+  it("should not lose precision when summing amounts beyond the safe integer range", () => {
+    const result = preparePromotionUsageComputedActions({
+      items: [
+        { adjustments: [{ code: "PROMO", amount: "9007199254740992" }] },
+        { adjustments: [{ code: "PROMO", amount: "1" }] },
+      ],
+    } as any)
+
+    expect(result).toHaveLength(1)
+    expect(MathBN.convert(result[0].amount).toFixed()).toEqual(
+      "9007199254740993"
+    )
   })
 
   it("should keep a single adjustment amount untouched", () => {
