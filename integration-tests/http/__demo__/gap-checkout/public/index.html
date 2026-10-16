@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Gap | Checkout regression run</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="promo-bar">
+      Extra 40% off your bag with code <b>GAP40</b> &middot; Free shipping on
+      $50+ for Rewards Members
+    </div>
+    <header id="site-header">
+      <div class="brand-row">
+        <div class="family">
+          <span class="fam active">GAP</span><span class="fam">Old Navy</span
+          ><span class="fam">Banana Republic</span
+          ><span class="fam">Athleta</span>
+        </div>
+      </div>
+      <div class="nav-row">
+        <div class="logo">GAP</div>
+        <nav>
+          <a>New</a><a>Women</a><a>Men</a><a>Girls</a><a>Boys</a><a>Toddler</a
+          ><a>Baby</a><a>Maternity</a><a class="sale">Sale</a>
+        </nav>
+        <div class="nav-icons">
+          <span class="search">Search Gap</span>
+          <span class="bag-icon" id="bag-icon"
+            >Bag <b id="bag-count">0</b></span
+          >
+        </div>
+      </div>
+    </header>
+
+    <div id="layout">
+      <main id="store">
+        <section id="view-browse" class="view active">
+          <div class="hero">
+            <div class="hero-copy">
+              <div class="eyebrow">THE ARCH LOGO EDIT</div>
+              <h1>Soft, worn-in, <br />always yours.</h1>
+              <div class="hero-cta">Shop New Arrivals</div>
+            </div>
+            <div class="hero-art"></div>
+          </div>
+          <div id="grid" class="grid"></div>
+        </section>
+
+        <section id="view-checkout" class="view">
+          <div class="checkout-head">
+            <div class="logo small">GAP</div>
+            <div class="secure">Secure Checkout</div>
+          </div>
+          <div class="checkout-body">
+            <div class="checkout-main">
+              <div class="co-card" id="co-bag">
+                <h3><span class="num">1</span> Your Bag</h3>
+                <div id="bag-lines"></div>
+              </div>
+              <div class="co-card" id="co-address">
+                <h3><span class="num">2</span> Shipping Address</h3>
+                <div id="address-box" class="muted">Not entered yet</div>
+              </div>
+              <div class="co-card" id="co-delivery">
+                <h3><span class="num">3</span> Delivery</h3>
+                <div id="delivery-box" class="muted">Not selected</div>
+              </div>
+              <div class="co-card" id="co-payment">
+                <h3><span class="num">4</span> Payment</h3>
+                <div id="payment-box" class="muted">Not started</div>
+              </div>
+            </div>
+            <aside class="checkout-summary" id="co-summary">
+              <h3>Order Summary</h3>
+              <div class="promo-row" id="promo-row">
+                <input id="promo-input" placeholder="Promo code" readonly />
+                <span class="apply">Apply</span>
+              </div>
+              <div id="promo-chips"></div>
+              <div class="sum-row">
+                <span>Subtotal</span><span id="sum-subtotal">-</span>
+              </div>
+              <div class="sum-row discount">
+                <span>Rewards &amp; Promos</span
+                ><span id="sum-discount">-</span>
+              </div>
+              <div class="sum-row">
+                <span>Shipping</span><span id="sum-shipping">-</span>
+              </div>
+              <div class="sum-row">
+                <span>Estimated Tax</span><span id="sum-tax">-</span>
+              </div>
+              <div class="sum-row" id="credit-row" style="display: none">
+                <span>Gift Card / Credit</span><span id="sum-credit">-</span>
+              </div>
+              <div class="sum-row total">
+                <span>Total</span><span id="sum-total">-</span>
+              </div>
+              <button id="place-order" class="place-order" disabled>
+                Place Order
+              </button>
+              <div id="order-banner"></div>
+            </aside>
+          </div>
+        </section>
+
+        <div id="confirm" class="overlay hidden">
+          <div class="confirm-card">
+            <div class="logo small">GAP</div>
+            <h2>Thanks for your order!</h2>
+            <div id="confirm-body"></div>
+          </div>
+        </div>
+      </main>
+
+      <aside id="runner">
+        <div class="runner-head">
+          <div class="runner-title">Devin &middot; Checkout regression run</div>
+          <div id="git-badge" class="git-badge">loading...</div>
+        </div>
+        <div class="runner-pick">
+          <select id="scenario-select"></select>
+          <button id="run-btn">Run scenario</button>
+        </div>
+        <div id="scenario-meta"></div>
+        <ol id="steps"></ol>
+        <div id="verdict"></div>
+        <div class="log-head">Live API traffic (real Medusa backend)</div>
+        <div id="log"></div>
+      </aside>
+    </div>
+    <div id="toast"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
