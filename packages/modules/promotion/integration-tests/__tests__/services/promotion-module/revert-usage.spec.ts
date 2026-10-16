@@ -116,6 +116,85 @@ moduleIntegrationTestRunner({
           )
         })
 
+        it("should not lose decrements when spend budget reverts run concurrently", async () => {
+          const createdPromotion = await createDefaultPromotion(service, {})
+
+          await service.updateCampaigns({
+            id: "campaign-id-1",
+            budget: { used: 500, limit: 1000 },
+          })
+
+          // Ten concurrent -10 reverts. A read-modify-write revert lets each
+          // call read used=500 and write 490, losing the other decrements.
+          await Promise.all(
+            Array.from({ length: 10 }, () =>
+              service.revertUsage(
+                [{ amount: 10, code: createdPromotion.code! }],
+                { customer_email: null, customer_id: null }
+              )
+            )
+          )
+
+          const campaign = await service.retrieveCampaign("campaign-id-1", {
+            relations: ["budget"],
+          })
+
+          expect(campaign.budget!.used).toEqual(400)
+        })
+
+        it("should keep the spend budget consistent when registrations and reverts run concurrently", async () => {
+          const createdPromotion = await createDefaultPromotion(service, {})
+
+          await service.updateCampaigns({
+            id: "campaign-id-1",
+            budget: { used: 500, limit: 1000 },
+          })
+
+          const context = { customer_email: null, customer_id: null }
+          const actions = [{ amount: 10, code: createdPromotion.code! }]
+
+          // Five +10 registrations interleaved with five -10 reverts must net out
+          await Promise.all(
+            Array.from({ length: 10 }, (_, i) =>
+              i % 2 === 0
+                ? service.registerUsage(actions, context)
+                : service.revertUsage(actions, context)
+            )
+          )
+
+          const campaign = await service.retrieveCampaign("campaign-id-1", {
+            relations: ["budget"],
+          })
+
+          expect(campaign.budget!.used).toEqual(500)
+        })
+
+        it("should not lose decrements when promotion limit reverts run concurrently", async () => {
+          const createdPromotion = await createDefaultPromotion(service, {
+            limit: 10,
+          })
+
+          for (let i = 0; i < 5; i++) {
+            await service.registerUsage(
+              [{ amount: 10, code: createdPromotion.code! }],
+              { customer_email: null, customer_id: null }
+            )
+          }
+
+          await Promise.all(
+            Array.from({ length: 5 }, () =>
+              service.revertUsage(
+                [{ amount: 10, code: createdPromotion.code! }],
+                { customer_email: null, customer_id: null }
+              )
+            )
+          )
+
+          const promotion = await service.retrievePromotion(createdPromotion.id)
+
+          expect(promotion.used).toEqual(0)
+        })
+
         it("should not throw an error when compute action with code does not exist", async () => {
           const response = await service
             .revertUsage([{ amount: 200, code: "DOESNOTEXIST" }])

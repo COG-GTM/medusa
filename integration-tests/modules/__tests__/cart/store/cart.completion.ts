@@ -11,6 +11,7 @@ import {
   listShippingOptionsForCartWorkflow,
   orderEditAddNewItemWorkflow,
   processPaymentWorkflow,
+  updateCartPromotionsWorkflow,
 } from "@medusajs/core-flows"
 import {
   createStep,
@@ -27,16 +28,21 @@ import {
   IPaymentModuleService,
   IPricingModuleService,
   IProductModuleService,
+  IPromotionModuleService,
   IRegionModuleService,
   ISalesChannelModuleService,
   IStockLocationService,
   Message,
 } from "@medusajs/types"
 import {
+  CampaignBudgetType,
   ContainerRegistrationKeys,
   Modules,
   PaymentCollectionStatus,
   ProductStatus,
+  PromotionActions,
+  PromotionStatus,
+  PromotionType,
   remoteQueryObjectFromString,
 } from "@medusajs/utils"
 import {
@@ -1216,6 +1222,134 @@ medusaIntegrationTestRunner({
           expect(errors[0].error.message).toBe(
             "Failed to do something before ending complete cart workflow"
           )
+        })
+
+        it("should revert promotion budget usage when concurrent cart completions fail after registering usage", async () => {
+          const promotionModule: IPromotionModuleService = appContainer.resolve(
+            Modules.PROMOTION
+          )
+
+          const region = await regionModuleService.createRegions({
+            name: "US",
+            currency_code: "usd",
+          })
+
+          await linkRegionPaymentProviders(appContainer, region.id)
+
+          const [campaign] = await promotionModule.createCampaigns([
+            {
+              name: "Concurrent compensation campaign",
+              campaign_identifier: "CONCURRENT_COMPENSATION",
+              budget: {
+                type: CampaignBudgetType.SPEND,
+                currency_code: "usd",
+                limit: 10000,
+              },
+            },
+          ])
+
+          const promotion = await promotionModule.createPromotions({
+            code: "CONCURRENT_COMPENSATION_PROMO",
+            type: PromotionType.STANDARD,
+            status: PromotionStatus.ACTIVE,
+            campaign_id: campaign.id,
+            application_method: {
+              type: "fixed",
+              target_type: "items",
+              allocation: "across",
+              currency_code: "usd",
+              value: 100,
+            },
+          })
+
+          const cartIds: string[] = []
+          for (let i = 0; i < 10; i++) {
+            const cart = await cartModuleService.createCarts({
+              currency_code: "usd",
+              region_id: region.id,
+            })
+
+            await addToCartWorkflow(appContainer).run({
+              input: {
+                cart_id: cart.id,
+                items: [
+                  {
+                    title: "Test item",
+                    requires_shipping: false,
+                    is_discountable: true,
+                    is_tax_inclusive: false,
+                    unit_price: 3000,
+                    quantity: 1,
+                  },
+                ],
+              },
+            })
+
+            await updateCartPromotionsWorkflow(appContainer).run({
+              input: {
+                cart_id: cart.id,
+                promo_codes: [promotion.code!],
+                action: PromotionActions.ADD,
+              },
+            })
+
+            const { result: paymentCollection } =
+              await createPaymentCollectionForCartWorkflow(appContainer).run({
+                input: { cart_id: cart.id },
+              })
+
+            await createPaymentSessionsWorkflow(appContainer).run({
+              input: {
+                payment_collection_id: paymentCollection.id,
+                provider_id: "pp_system_default",
+                context: {},
+                data: {},
+              },
+            })
+
+            cartIds.push(cart.id)
+          }
+
+          // Every completion registers 100 of budget usage and then fails, so
+          // the compensations (revertUsage) run concurrently and must all apply.
+          const results = await Promise.all(
+            cartIds.map((id, i) => {
+              const workflow = completeCartWorkflow(appContainer)
+
+              workflow.addAction(`throw-after-usage-${i}`, {
+                invoke: async function failStep() {
+                  throw new Error("Failed after registering promotion usage")
+                },
+              })
+
+              return workflow.run({ input: { id }, throwOnError: false })
+            })
+          )
+
+          for (const { errors } of results) {
+            expect(errors[0].error.message).toBe(
+              "Failed after registering promotion usage"
+            )
+          }
+
+          let budgetCampaign = await promotionModule.retrieveCampaign(
+            campaign.id,
+            { relations: ["budget"] }
+          )
+
+          expect(budgetCampaign.budget!.used).toEqual(0)
+
+          const { result } = await completeCartWorkflow(appContainer).run({
+            input: { id: cartIds[0] },
+          })
+
+          expect(result.id).toBeDefined()
+
+          budgetCampaign = await promotionModule.retrieveCampaign(campaign.id, {
+            relations: ["budget"],
+          })
+
+          expect(budgetCampaign.budget!.used).toEqual(100)
         })
 
         it("should avoid completing cart when order already exists", async () => {
