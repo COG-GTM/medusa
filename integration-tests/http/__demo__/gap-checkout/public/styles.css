@@ -424,6 +424,9 @@ nav a.sale {
 }
 .runner-pick select {
   flex: 1;
+  min-width: 0;
+  width: 100%;
+  text-overflow: ellipsis;
   background: #16223a;
   color: #e6edf7;
   border: 1px solid #2c3d5c;
@@ -431,6 +434,8 @@ nav a.sale {
   font-size: 12px;
 }
 .runner-pick button {
+  flex-shrink: 0;
+  white-space: nowrap;
   background: #3b82f6;
   border: 0;
   color: #fff;
