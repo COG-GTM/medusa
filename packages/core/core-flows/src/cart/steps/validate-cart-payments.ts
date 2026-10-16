@@ -1,4 +1,4 @@
-import type { CartWorkflowDTO } from "@medusajs/framework/types"
+import type { BigNumberInput, CartWorkflowDTO } from "@medusajs/framework/types"
 import {
   isPresent,
   MathBN,
@@ -22,8 +22,9 @@ export interface ValidateCartPaymentsStepInput {
 export const validateCartPaymentsStepId = "validate-cart-payments"
 /**
  * This step validates a cart's payment sessions. Their status must
- * be `pending`, `requires_more`, `authorized`, or `captured`, and their payment
- * provider must be enabled in the cart's region. If not valid, the step throws an error.
+ * be `pending`, `requires_more`, `authorized`, or `captured`, their payment
+ * provider must be enabled in the cart's region, and the payment collection and
+ * session amounts must match the cart's total. If not valid, the step throws an error.
  *
  * :::tip
  *
@@ -45,6 +46,7 @@ export const validateCartPaymentsStep = createStep(
       cart: {
         payment_collection: paymentCollection,
         total,
+        raw_total: rawTotal,
         credit_line_total,
         region_id: regionId,
       },
@@ -82,6 +84,36 @@ export const validateCartPaymentsStep = createStep(
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Payment sessions are required to complete cart`
+      )
+    }
+
+    // Mirrors the comparison used by refreshPaymentCollectionForCartWorkflow
+    const { raw_amount: collectionRawAmount } = paymentCollection as {
+      raw_amount?: BigNumberInput
+    }
+
+    if (
+      !MathBN.eq(
+        collectionRawAmount ?? paymentCollection.amount,
+        rawTotal ?? total
+      )
+    ) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Payment collection ${paymentCollection.id} amount (${paymentCollection.amount}) does not match the cart total (${total}). Refresh the cart's payment collection and payment sessions before completing the cart.`
+      )
+    }
+
+    // Sessions are created from the collection's numeric amount, so compare
+    // them against the cart's numeric total
+    const staleSession = paymentsToProcess.find(
+      (ps) => !MathBN.eq(ps.amount, total)
+    )
+
+    if (staleSession) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Payment session ${staleSession.id} amount (${staleSession.amount}) does not match the cart total (${total}). Refresh the cart's payment sessions before completing the cart.`
       )
     }
 

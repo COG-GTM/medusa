@@ -316,6 +316,212 @@ medusaIntegrationTestRunner({
           )
         })
 
+        describe("payment amount validation", () => {
+          const setupCartWithPaymentSession = async () => {
+            const salesChannel = await scModuleService.createSalesChannels({
+              name: "Webshop",
+            })
+
+            const region = await regionModuleService.createRegions({
+              name: "US",
+              currency_code: "usd",
+            })
+
+            await linkRegionPaymentProviders(appContainer, region.id)
+
+            const cart = await cartModuleService.createCarts({
+              currency_code: "usd",
+              sales_channel_id: salesChannel.id,
+              region_id: region.id,
+            })
+
+            await addToCartWorkflow(appContainer).run({
+              input: {
+                items: [
+                  {
+                    title: "Test item",
+                    requires_shipping: false,
+                    is_discountable: false,
+                    is_tax_inclusive: false,
+                    unit_price: 3000,
+                    quantity: 1,
+                  },
+                ],
+                cart_id: cart.id,
+              },
+            })
+
+            await createPaymentCollectionForCartWorkflow(appContainer).run({
+              input: {
+                cart_id: cart.id,
+              },
+            })
+
+            const [payCol] = await remoteQuery(
+              remoteQueryObjectFromString({
+                entryPoint: "cart_payment_collection",
+                variables: { filters: { cart_id: cart.id } },
+                fields: ["payment_collection_id"],
+              })
+            )
+
+            const { result: paymentSession } =
+              await createPaymentSessionsWorkflow(appContainer).run({
+                input: {
+                  payment_collection_id: payCol.payment_collection_id,
+                  provider_id: "pp_system_default",
+                  context: {},
+                  data: {},
+                },
+              })
+
+            return {
+              cart,
+              paymentCollectionId: payCol.payment_collection_id,
+              paymentSession,
+            }
+          }
+
+          it("should fail to complete cart when the cart total changed after the payment session was created", async () => {
+            const { cart, paymentCollectionId, paymentSession } =
+              await setupCartWithPaymentSession()
+
+            expect(paymentSession.amount).toEqual(3000)
+
+            // Mutate the cart without refreshing its payment collection
+            await cartModuleService.addLineItems({
+              cart_id: cart.id,
+              title: "Late item",
+              requires_shipping: false,
+              is_tax_inclusive: false,
+              unit_price: 1000,
+              quantity: 1,
+            })
+
+            const { errors } = await completeCartWorkflow(appContainer).run({
+              input: {
+                id: cart.id,
+              },
+              throwOnError: false,
+            })
+
+            expect(errors).toHaveLength(1)
+            expect(errors[0].action).toEqual("validate-cart-payments")
+            expect(errors[0].error).toEqual(
+              expect.objectContaining({
+                type: "invalid_data",
+                message: expect.stringContaining(
+                  `Payment collection ${paymentCollectionId} amount (3000) does not match the cart total (4000)`
+                ),
+              })
+            )
+
+            const { data: carts } = await query.graph({
+              entity: "cart",
+              filters: { id: cart.id },
+              fields: ["id", "completed_at"],
+            })
+            expect(carts[0].completed_at).toBeNull()
+
+            const [session] = await paymentModule.listPaymentSessions({
+              id: paymentSession.id,
+            })
+            expect(session.status).toEqual("pending")
+          })
+
+          it("should fail to complete cart when the payment session amount is stale", async () => {
+            const { cart, paymentCollectionId, paymentSession } =
+              await setupCartWithPaymentSession()
+
+            await cartModuleService.addLineItems({
+              cart_id: cart.id,
+              title: "Late item",
+              requires_shipping: false,
+              is_tax_inclusive: false,
+              unit_price: 1000,
+              quantity: 1,
+            })
+
+            // The collection is updated to the new total, but the existing
+            // session still holds the old amount
+            await paymentModule.updatePaymentCollections(paymentCollectionId, {
+              amount: 4000,
+            })
+
+            const { errors } = await completeCartWorkflow(appContainer).run({
+              input: {
+                id: cart.id,
+              },
+              throwOnError: false,
+            })
+
+            expect(errors).toHaveLength(1)
+            expect(errors[0].action).toEqual("validate-cart-payments")
+            expect(errors[0].error).toEqual(
+              expect.objectContaining({
+                type: "invalid_data",
+                message: expect.stringContaining(
+                  `Payment session ${paymentSession.id} amount (3000) does not match the cart total (4000)`
+                ),
+              })
+            )
+          })
+
+          it("should complete cart once the payment collection is refreshed after the cart was modified", async () => {
+            const { cart, paymentCollectionId } =
+              await setupCartWithPaymentSession()
+
+            // Adding items through the workflow refreshes the payment collection
+            await addToCartWorkflow(appContainer).run({
+              input: {
+                items: [
+                  {
+                    title: "Late item",
+                    requires_shipping: false,
+                    is_discountable: false,
+                    is_tax_inclusive: false,
+                    unit_price: 1000,
+                    quantity: 1,
+                  },
+                ],
+                cart_id: cart.id,
+              },
+            })
+
+            await createPaymentSessionsWorkflow(appContainer).run({
+              input: {
+                payment_collection_id: paymentCollectionId,
+                provider_id: "pp_system_default",
+                context: {},
+                data: {},
+              },
+            })
+
+            const { result: order } = await completeCartWorkflow(
+              appContainer
+            ).run({
+              input: {
+                id: cart.id,
+              },
+            })
+
+            const { result: fullOrder } = await getOrderDetailWorkflow(
+              appContainer
+            ).run({
+              input: {
+                fields: ["*"],
+                order_id: order.id,
+              },
+            })
+
+            expect(fullOrder.total).toEqual(4000)
+            expect(fullOrder.payment_collections[0].amount).toEqual(4000)
+            expect(fullOrder.payment_collections[0].authorized_amount).toEqual(
+              4000
+            )
+          })
+        })
+
         it("should complete cart reserving inventory from available locations", async () => {
           const salesChannel = await scModuleService.createSalesChannels({
             name: "Webshop",
