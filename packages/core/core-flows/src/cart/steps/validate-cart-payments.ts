@@ -17,13 +17,19 @@ export interface ValidateCartPaymentsStepInput {
    * The cart to validate payment sessions for.
    */
   cart: CartWorkflowDTO
+  /**
+   * The ID of the order already placed for the cart, if any. A retried completion
+   * doesn't authorize payment again, so multiple processable sessions are allowed.
+   */
+  order_id?: string
 }
 
 export const validateCartPaymentsStepId = "validate-cart-payments"
 /**
- * This step validates a cart's payment sessions. Their status must
- * be `pending`, `requires_more`, `authorized`, or `captured`, and their payment
- * provider must be enabled in the cart's region. If not valid, the step throws an error.
+ * This step validates a cart's payment sessions. Exactly one session must have
+ * a processable status (`pending`, `requires_more`, `authorized`, `captured`, or
+ * `pending_authorization`), and its payment provider must be enabled in the cart's
+ * region. If not valid, the step throws an error.
  *
  * :::tip
  *
@@ -82,6 +88,21 @@ export const validateCartPaymentsStep = createStep(
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Payment sessions are required to complete cart`
+      )
+    }
+
+    // Cart completion authorizes exactly one payment session. Authorizing more
+    // than one could charge the customer multiple times, so we reject the cart
+    // instead of silently picking one. Carts with an order are skipped so retries
+    // still return the existing order, as no authorization happens for them.
+    if (paymentsToProcess.length > 1 && !data.order_id) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Cart ${
+          data.cart.id
+        } has more than one processable payment session (${paymentsToProcess
+          .map((ps) => ps.id)
+          .join(", ")}). Only one payment session can be authorized per cart.`
       )
     }
 

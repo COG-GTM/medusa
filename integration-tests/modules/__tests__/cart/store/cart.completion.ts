@@ -36,6 +36,7 @@ import {
   ContainerRegistrationKeys,
   Modules,
   PaymentCollectionStatus,
+  PaymentSessionStatus,
   ProductStatus,
   remoteQueryObjectFromString,
 } from "@medusajs/utils"
@@ -1538,6 +1539,264 @@ medusaIntegrationTestRunner({
           })
 
           expect(orders.data).toHaveLength(0)
+        })
+
+        describe("with multiple processable payment sessions", () => {
+          const setupCartWithPaymentCollection = async () => {
+            const salesChannel = await scModuleService.createSalesChannels({
+              name: "Webshop",
+            })
+
+            const region = await regionModuleService.createRegions({
+              name: "US",
+              currency_code: "usd",
+            })
+
+            await linkRegionPaymentProviders(appContainer, region.id)
+
+            const cart = await cartModuleService.createCarts({
+              currency_code: "usd",
+              sales_channel_id: salesChannel.id,
+              region_id: region.id,
+            })
+
+            await addToCartWorkflow(appContainer).run({
+              input: {
+                items: [
+                  {
+                    title: "Test item",
+                    requires_shipping: false,
+                    is_discountable: false,
+                    is_tax_inclusive: false,
+                    unit_price: 3000,
+                    quantity: 1,
+                  },
+                ],
+                cart_id: cart.id,
+              },
+            })
+
+            await createPaymentCollectionForCartWorkflow(appContainer).run({
+              input: {
+                cart_id: cart.id,
+              },
+            })
+
+            const [payCol] = await remoteQuery(
+              remoteQueryObjectFromString({
+                entryPoint: "cart_payment_collection",
+                variables: { filters: { cart_id: cart.id } },
+                fields: ["payment_collection_id"],
+              })
+            )
+
+            const { result: firstSession } =
+              await createPaymentSessionsWorkflow(appContainer).run({
+                input: {
+                  payment_collection_id: payCol.payment_collection_id,
+                  provider_id: "pp_system_default",
+                  context: {},
+                  data: {},
+                },
+              })
+
+            // createPaymentSessionsWorkflow replaces any existing session, so a
+            // second session can only appear through a direct module call (or a
+            // race between two concurrent session creations).
+            const secondSession = await paymentModule.createPaymentSession(
+              payCol.payment_collection_id,
+              {
+                provider_id: "pp_system_default",
+                currency_code: "usd",
+                amount: 3000,
+                data: {},
+              }
+            )
+
+            return {
+              cart,
+              paymentCollectionId: payCol.payment_collection_id,
+              firstSession,
+              secondSession,
+            }
+          }
+
+          it("should reject completing a cart with two processable payment sessions on one payment collection", async () => {
+            const { cart, paymentCollectionId, firstSession, secondSession } =
+              await setupCartWithPaymentCollection()
+
+            const { errors } = await completeCartWorkflow(appContainer).run({
+              input: {
+                id: cart.id,
+              },
+              throwOnError: false,
+            })
+
+            const {
+              data: [paymentCollection],
+            } = await query.graph({
+              entity: "payment_collection",
+              fields: ["id", "payment_sessions.*", "payments.*"],
+              filters: { id: paymentCollectionId },
+            })
+
+            const {
+              data: [cartAfter],
+            } = await query.graph({
+              entity: "cart",
+              fields: ["id", "completed_at"],
+              filters: { id: cart.id },
+            })
+
+            const { data: orderCarts } = await query.graph({
+              entity: "order_cart",
+              fields: ["id"],
+              filters: { cart_id: cart.id },
+            })
+
+            // Neither session may be authorized: the cart is rejected before any
+            // order is created or any payment is attempted.
+            expect(orderCarts).toHaveLength(0)
+            expect(cartAfter.completed_at).toBeNull()
+            expect(paymentCollection.payments).toHaveLength(0)
+            expect(paymentCollection.payment_sessions).toHaveLength(2)
+            expect(paymentCollection.payment_sessions).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  id: firstSession.id,
+                  status: "pending",
+                }),
+                expect.objectContaining({
+                  id: secondSession.id,
+                  status: "pending",
+                }),
+              ])
+            )
+
+            expect(errors).toHaveLength(1)
+            expect(errors[0].error).toEqual(
+              expect.objectContaining({
+                type: "invalid_data",
+                message: expect.stringContaining(
+                  `Cart ${cart.id} has more than one processable payment session`
+                ),
+              })
+            )
+            expect(errors[0].error.message).toContain(firstSession.id)
+            expect(errors[0].error.message).toContain(secondSession.id)
+          })
+
+          it("should complete a cart when only one of its payment sessions is processable", async () => {
+            const { cart, paymentCollectionId, firstSession, secondSession } =
+              await setupCartWithPaymentCollection()
+
+            await paymentModule.updatePaymentSession({
+              id: firstSession.id,
+              currency_code: "usd",
+              amount: 3000,
+              data: {},
+              status: PaymentSessionStatus.ERROR,
+            })
+
+            const { result: order } = await completeCartWorkflow(
+              appContainer
+            ).run({
+              input: {
+                id: cart.id,
+              },
+            })
+
+            expect(order.id).toEqual(expect.any(String))
+
+            const {
+              data: [paymentCollection],
+            } = await query.graph({
+              entity: "payment_collection",
+              fields: ["id", "payment_sessions.*", "payments.*"],
+              filters: { id: paymentCollectionId },
+            })
+
+            expect(paymentCollection.payments).toEqual([
+              expect.objectContaining({
+                payment_session_id: secondSession.id,
+              }),
+            ])
+            expect(paymentCollection.payment_sessions).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  id: firstSession.id,
+                  status: "error",
+                }),
+                expect.objectContaining({
+                  id: secondSession.id,
+                  status: "authorized",
+                }),
+              ])
+            )
+          })
+
+          it("should return the existing order when retrying a completed cart that gained another processable payment session", async () => {
+            const { cart, paymentCollectionId, firstSession, secondSession } =
+              await setupCartWithPaymentCollection()
+
+            await paymentModule.updatePaymentSession({
+              id: firstSession.id,
+              currency_code: "usd",
+              amount: 3000,
+              data: {},
+              status: PaymentSessionStatus.ERROR,
+            })
+
+            const { result: order } = await completeCartWorkflow(
+              appContainer
+            ).run({
+              input: {
+                id: cart.id,
+              },
+            })
+
+            const lateSession = await paymentModule.createPaymentSession(
+              paymentCollectionId,
+              {
+                provider_id: "pp_system_default",
+                currency_code: "usd",
+                amount: 3000,
+                data: {},
+              }
+            )
+
+            const { result: retriedOrder } = await completeCartWorkflow(
+              appContainer
+            ).run({
+              input: {
+                id: cart.id,
+              },
+            })
+
+            expect(retriedOrder.id).toEqual(order.id)
+
+            const {
+              data: [paymentCollection],
+            } = await query.graph({
+              entity: "payment_collection",
+              fields: ["id", "payment_sessions.*", "payments.*"],
+              filters: { id: paymentCollectionId },
+            })
+
+            expect(paymentCollection.payments).toEqual([
+              expect.objectContaining({
+                payment_session_id: secondSession.id,
+              }),
+            ])
+            expect(paymentCollection.payment_sessions).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  id: lateSession.id,
+                  status: "pending",
+                }),
+              ])
+            )
+          })
         })
       })
     })
