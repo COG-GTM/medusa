@@ -1273,7 +1273,7 @@ medusaIntegrationTestRunner({
             const { cart } = await prepareCart({ unitPrice: 0 })
 
             await cartModuleService.updateCarts(cart.id, {
-              completed_at: new Date(Date.now() - 10 * 60 * 1000),
+              completed_at: new Date(Date.now() - 20 * 60 * 1000),
             })
 
             const { result } = await completeCartWorkflow(appContainer).run({
@@ -1287,6 +1287,31 @@ medusaIntegrationTestRunner({
             })
 
             expect(orderCartLinks).toEqual([{ order_id: result.id }])
+          })
+
+          it("should keep the claim of a completion still running past the cart lock TTL", async () => {
+            const { cart } = await prepareCart({ unitPrice: 0 })
+
+            await cartModuleService.updateCarts(cart.id, {
+              completed_at: new Date(Date.now() - 5 * 60 * 1000),
+            })
+
+            const { errors } = await completeCartWorkflow(appContainer).run({
+              input: { id: cart.id },
+              throwOnError: false,
+            })
+
+            expect(errors[0].error.message).toEqual(
+              `Cart ${cart.id} is already being completed by another request`
+            )
+
+            const { data: orderCartLinks } = await query.graph({
+              entity: "order_cart",
+              fields: ["order_id"],
+              filters: { cart_id: cart.id },
+            })
+
+            expect(orderCartLinks).toEqual([])
           })
 
           it("should reject a completion while another one is in progress without refunding its captured payment", async () => {

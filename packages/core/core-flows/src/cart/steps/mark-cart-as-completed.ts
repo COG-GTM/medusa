@@ -12,16 +12,17 @@ export interface MarkCartAsCompletedStepInput {
   id: string
 }
 
-// Matches the TTL of the cart completion lock: a claim older than this belongs to
-// a completion that was abandoned (e.g. the process crashed) and can be reclaimed.
-const ABANDONED_CLAIM_TTL_MS = 2 * 60 * 1000
+// A claim without an order that is older than this belongs to a completion that was
+// abandoned (e.g. the process crashed) and can be reclaimed. It's well above the
+// cart completion lock's TTL so that a slow, still running completion keeps its claim.
+const ABANDONED_CLAIM_TTL_MS = 15 * 60 * 1000
 
 export const markCartAsCompletedStepId = "mark-cart-as-completed"
 /**
  * This step atomically marks a cart as completed. It throws a conflict error if the
  * cart was already completed, which guarantees that only one of several concurrent
  * completions of the same cart can place an order. A cart marked as completed more
- * than two minutes ago without an order is considered abandoned and can be claimed again.
+ * than fifteen minutes ago without an order is considered abandoned and can be claimed again.
  *
  * @example
  * markCartAsCompletedStep({
@@ -44,15 +45,23 @@ export const markCartAsCompletedStep = createStep(
       )
     }
 
-    return new StepResponse(void 0, data.id)
+    const { completed_at } = await cartModule.retrieveCart(data.id, {
+      select: ["id", "completed_at"],
+    })
+
+    return new StepResponse(void 0, { id: data.id, completed_at })
   },
-  async (cartId, { container }) => {
-    if (!cartId) {
+  async (claim, { container }) => {
+    if (!claim) {
       return
     }
 
     const cartModule = container.resolve<ICartModuleService>(Modules.CART)
 
-    await cartModule.updateCarts(cartId, { completed_at: null })
+    // Only release the claim if it is still ours, so that a reclaimed cart isn't released
+    await cartModule.updateCarts(
+      { id: claim.id, completed_at: claim.completed_at },
+      { completed_at: null }
+    )
   }
 )
