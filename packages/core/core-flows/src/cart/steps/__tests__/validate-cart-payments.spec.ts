@@ -8,8 +8,10 @@ import { createWorkflow, WorkflowResponse } from "@medusajs/workflows-sdk"
 import { validateCartPaymentsStep } from "../validate-cart-payments"
 
 const buildCart = (
-  sessions: { id: string; status: PaymentSessionStatus }[]
+  sessions: { id: string; status: PaymentSessionStatus }[],
+  overrides: Record<string, unknown> = {}
 ): any => ({
+  ...overrides,
   id: "cart_1",
   region_id: "reg_1",
   total: 3000,
@@ -92,5 +94,21 @@ describe("validateCartPaymentsStep", () => {
           "Cart cart_1 has more than one processable payment session (ps_1, ps_2). Only one payment session can be authorized per cart.",
       })
     )
+  })
+
+  it("should allow multiple processable payment sessions on an already completed cart", async () => {
+    const { result } = await workflow(container).run({
+      input: {
+        cart: buildCart(
+          [
+            { id: "ps_1", status: PaymentSessionStatus.AUTHORIZED },
+            { id: "ps_2", status: PaymentSessionStatus.PENDING },
+          ],
+          { completed_at: new Date() }
+        ),
+      },
+    })
+
+    expect(result.map((ps) => ps.id)).toEqual(["ps_1", "ps_2"])
   })
 })

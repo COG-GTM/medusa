@@ -88,8 +88,9 @@ export const validateCartPaymentsStep = createStep(
 
     // Cart completion authorizes exactly one payment session. Authorizing more
     // than one could charge the customer multiple times, so we reject the cart
-    // instead of silently picking one.
-    if (paymentsToProcess.length > 1) {
+    // instead of silently picking one. Completed carts are skipped so retries
+    // still return the existing order, as no authorization happens for them.
+    if (paymentsToProcess.length > 1 && !data.cart.completed_at) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Cart ${

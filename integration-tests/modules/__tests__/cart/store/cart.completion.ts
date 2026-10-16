@@ -1734,6 +1734,69 @@ medusaIntegrationTestRunner({
               ])
             )
           })
+
+          it("should return the existing order when retrying a completed cart that gained another processable payment session", async () => {
+            const { cart, paymentCollectionId, firstSession, secondSession } =
+              await setupCartWithPaymentCollection()
+
+            await paymentModule.updatePaymentSession({
+              id: firstSession.id,
+              currency_code: "usd",
+              amount: 3000,
+              data: {},
+              status: PaymentSessionStatus.ERROR,
+            })
+
+            const { result: order } = await completeCartWorkflow(
+              appContainer
+            ).run({
+              input: {
+                id: cart.id,
+              },
+            })
+
+            const lateSession = await paymentModule.createPaymentSession(
+              paymentCollectionId,
+              {
+                provider_id: "pp_system_default",
+                currency_code: "usd",
+                amount: 3000,
+                data: {},
+              }
+            )
+
+            const { result: retriedOrder } = await completeCartWorkflow(
+              appContainer
+            ).run({
+              input: {
+                id: cart.id,
+              },
+            })
+
+            expect(retriedOrder.id).toEqual(order.id)
+
+            const {
+              data: [paymentCollection],
+            } = await query.graph({
+              entity: "payment_collection",
+              fields: ["id", "payment_sessions.*", "payments.*"],
+              filters: { id: paymentCollectionId },
+            })
+
+            expect(paymentCollection.payments).toEqual([
+              expect.objectContaining({
+                payment_session_id: secondSession.id,
+              }),
+            ])
+            expect(paymentCollection.payment_sessions).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({
+                  id: lateSession.id,
+                  status: "pending",
+                }),
+              ])
+            )
+          })
         })
       })
     })
