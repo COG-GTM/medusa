@@ -19,6 +19,8 @@ export interface ValidateCartTaxConsistencyStepInput {
   >
 }
 
+const SYSTEM_TAX_PROVIDER_ID = "tp_system"
+
 const normalizeCode = (code?: string | null) => code?.toLowerCase() || null
 
 export const validateCartTaxConsistencyStepId = "validate-cart-tax-consistency"
@@ -31,8 +33,9 @@ export const validateCartTaxConsistencyStepId = "validate-cart-tax-consistency"
  * doesn't match the shipping address's country or province, meaning the tax lines are stale.
  * - A tax line was calculated from a country-level rate, but the shipping address's province has a
  * default tax rate, which takes precedence.
- * - The region has automatic taxes enabled, the shipping address resolves to a tax region with a
- * default tax rate, and an item (other than a gift card) or shipping method has no tax lines.
+ * - The region has automatic taxes enabled, the shipping address's country has a tax region using the
+ * system tax provider with a default tax rate, and an item (other than a gift card) or shipping method
+ * has no tax lines.
  *
  * If the cart has no shipping address country, the step doesn't perform any validation.
  *
@@ -109,16 +112,26 @@ export const validateCartTaxConsistencyStep = createStep(
 
     const { data: countryTaxRegions } = await query.graph({
       entity: "tax_region",
-      fields: ["id", "province_code", "tax_rates.is_default"],
+      fields: ["id", "province_code", "provider_id", "tax_rates.is_default"],
       filters: { country_code: countryCode },
     })
 
     const hasDefaultTaxRate = (taxRegion: (typeof countryTaxRegions)[0]) =>
       (taxRegion.tax_rates ?? []).some((taxRate) => taxRate?.is_default)
 
+    // The tax module only calculates taxes when a country-level tax region
+    // exists, and only the system provider is guaranteed to return a tax line
+    // for each applicable rate. Custom providers may exempt items or shipping.
+    const countryTaxRegion = countryTaxRegions.find(
+      (taxRegion) => !taxRegion.province_code
+    )
+    const usesSystemTaxProvider =
+      countryTaxRegion?.provider_id === SYSTEM_TAX_PROVIDER_ID
+
     // The tax module always prefers a province's default rate over any
     // country-level rate.
     const provinceHasDefaultTaxRate =
+      usesSystemTaxProvider &&
       !!provinceCode &&
       countryTaxRegions.some(
         (taxRegion) =>
@@ -190,9 +203,7 @@ export const validateCartTaxConsistencyStep = createStep(
     // all have tax lines.
     const requiresTaxLines =
       provinceHasDefaultTaxRate ||
-      countryTaxRegions.some(
-        (taxRegion) => !taxRegion.province_code && hasDefaultTaxRate(taxRegion)
-      )
+      (usesSystemTaxProvider && hasDefaultTaxRate(countryTaxRegion!))
 
     if (requiresTaxLines) {
       throw new MedusaError(
