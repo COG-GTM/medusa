@@ -17,6 +17,11 @@ export interface ValidateCartPaymentsStepInput {
    * The cart to validate payment sessions for.
    */
   cart: CartWorkflowDTO
+  /**
+   * The ID of the order already placed for the cart, if any. A retried completion
+   * doesn't authorize payment again, so multiple processable sessions are allowed.
+   */
+  order_id?: string
 }
 
 export const validateCartPaymentsStepId = "validate-cart-payments"
@@ -88,9 +93,9 @@ export const validateCartPaymentsStep = createStep(
 
     // Cart completion authorizes exactly one payment session. Authorizing more
     // than one could charge the customer multiple times, so we reject the cart
-    // instead of silently picking one. Completed carts are skipped so retries
+    // instead of silently picking one. Carts with an order are skipped so retries
     // still return the existing order, as no authorization happens for them.
-    if (paymentsToProcess.length > 1 && !data.cart.completed_at) {
+    if (paymentsToProcess.length > 1 && !data.order_id) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Cart ${

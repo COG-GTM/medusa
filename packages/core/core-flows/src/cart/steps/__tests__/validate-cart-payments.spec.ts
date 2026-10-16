@@ -8,10 +8,8 @@ import { createWorkflow, WorkflowResponse } from "@medusajs/workflows-sdk"
 import { validateCartPaymentsStep } from "../validate-cart-payments"
 
 const buildCart = (
-  sessions: { id: string; status: PaymentSessionStatus }[],
-  overrides: Record<string, unknown> = {}
+  sessions: { id: string; status: PaymentSessionStatus }[]
 ): any => ({
-  ...overrides,
   id: "cart_1",
   region_id: "reg_1",
   total: 3000,
@@ -30,8 +28,11 @@ describe("validateCartPaymentsStep", () => {
 
   const workflow = createWorkflow(
     "validate-cart-payments-step-test",
-    (input: { cart: any }) => {
-      const result = validateCartPaymentsStep({ cart: input.cart })
+    (input: { cart: any; order_id?: string }) => {
+      const result = validateCartPaymentsStep({
+        cart: input.cart,
+        order_id: input.order_id,
+      })
       return new WorkflowResponse(result)
     }
   )
@@ -96,16 +97,14 @@ describe("validateCartPaymentsStep", () => {
     )
   })
 
-  it("should allow multiple processable payment sessions on an already completed cart", async () => {
+  it("should allow multiple processable payment sessions when the cart already has an order", async () => {
     const { result } = await workflow(container).run({
       input: {
-        cart: buildCart(
-          [
-            { id: "ps_1", status: PaymentSessionStatus.AUTHORIZED },
-            { id: "ps_2", status: PaymentSessionStatus.PENDING },
-          ],
-          { completed_at: new Date() }
-        ),
+        cart: buildCart([
+          { id: "ps_1", status: PaymentSessionStatus.AUTHORIZED },
+          { id: "ps_2", status: PaymentSessionStatus.PENDING },
+        ]),
+        order_id: "order_1",
       },
     })
 
