@@ -82,6 +82,39 @@ moduleIntegrationTestRunner({
           expect(campaign.budget!.used).toBeLessThanOrEqual(1000)
         })
 
+        it("should let exactly one of two concurrent registrations consume a usage budget with limit 1", async () => {
+          await service.updateCampaigns({
+            id: "campaign-id-2",
+            budget: { used: 0, limit: 1 },
+          })
+
+          const createdPromotion = await createDefaultPromotion(service, {
+            campaign_id: "campaign-id-2",
+          })
+
+          const outcomes = await Promise.all(
+            Array.from({ length: 2 }, () =>
+              service
+                .registerUsage(
+                  [{ amount: 100, code: createdPromotion.code! }],
+                  { customer_email: null, customer_id: null }
+                )
+                .then(
+                  () => "ok",
+                  (e) => e.type
+                )
+            )
+          )
+
+          expect(outcomes.sort()).toEqual(["not_allowed", "ok"])
+
+          const campaign = await service.retrieveCampaign("campaign-id-2", {
+            relations: ["budget"],
+          })
+
+          expect(campaign.budget!.used).toEqual(1)
+        })
+
         it("should not allow concurrent per-attribute registrations to exceed the limit", async () => {
           const [createdCampaign] = await service.createCampaigns([
             {

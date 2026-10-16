@@ -2930,6 +2930,141 @@ medusaIntegrationTestRunner({
             )
           })
 
+          it("should let exactly one of two concurrently completed carts consume a campaign budget with limit 1", async () => {
+            const product = (
+              await api.post(
+                `/admin/products`,
+                {
+                  status: ProductStatus.PUBLISHED,
+                  title: "Product for concurrent budget",
+                  description: "test",
+                  options: [{ title: "Type", values: ["L"] }],
+                  variants: [
+                    {
+                      title: "L",
+                      sku: "concurrent-budget-product-l",
+                      options: { Type: "L" },
+                      manage_inventory: false,
+                      prices: [{ amount: 300, currency_code: "usd" }],
+                    },
+                  ],
+                },
+                adminHeaders
+              )
+            ).data.product
+
+            const campaign = (
+              await api.post(
+                `/admin/campaigns`,
+                {
+                  name: "CONCURRENT-BUDGET",
+                  budget: { type: "usage", limit: 1 },
+                  campaign_identifier: "CONCURRENT_BUDGET_CAMPAIGN",
+                },
+                adminHeaders
+              )
+            ).data.campaign
+
+            const promotion = (
+              await api.post(
+                `/admin/promotions`,
+                {
+                  code: "CONCURRENT_BUDGET_PROMO",
+                  type: PromotionType.STANDARD,
+                  status: PromotionStatus.ACTIVE,
+                  is_automatic: false,
+                  is_tax_inclusive: true,
+                  application_method: {
+                    target_type: "items",
+                    type: "fixed",
+                    allocation: "across",
+                    currency_code: "usd",
+                    value: 100,
+                  },
+                  campaign_id: campaign.id,
+                },
+                adminHeaders
+              )
+            ).data.promotion
+
+            const carts: any[] = []
+            for (let i = 0; i < 2; i++) {
+              const cart = (
+                await api.post(
+                  `/store/carts`,
+                  {
+                    currency_code: "usd",
+                    sales_channel_id: salesChannel.id,
+                    region_id: region.id,
+                    shipping_address: shippingAddressData,
+                    items: [
+                      { variant_id: product.variants[0].id, quantity: 1 },
+                    ],
+                    promo_codes: [promotion.code],
+                  },
+                  storeHeadersWithCustomer
+                )
+              ).data.cart
+
+              expect(cart.promotions).toEqual([
+                expect.objectContaining({ code: promotion.code }),
+              ])
+
+              const paymentCollection = (
+                await api.post(
+                  `/store/payment-collections`,
+                  { cart_id: cart.id },
+                  storeHeaders
+                )
+              ).data.payment_collection
+
+              await api.post(
+                `/store/payment-collections/${paymentCollection.id}/payment-sessions`,
+                { provider_id: "pp_system_default" },
+                storeHeaders
+              )
+
+              carts.push(cart)
+            }
+
+            const responses = await Promise.all(
+              carts.map((cart) =>
+                api
+                  .post(`/store/carts/${cart.id}/complete`, {}, storeHeaders)
+                  .catch((e) => e.response)
+              )
+            )
+
+            const succeeded = responses.filter((r) => r.status === 200)
+            const rejected = responses.filter((r) => r.status !== 200)
+
+            expect(succeeded).toHaveLength(1)
+            expect(succeeded[0].data.type).toEqual("order")
+            expect(succeeded[0].data.order).toEqual(
+              expect.objectContaining({ discount_total: 100 })
+            )
+
+            expect(rejected).toHaveLength(1)
+            expect(rejected[0].status).toEqual(400)
+            expect(rejected[0].data).toEqual(
+              expect.objectContaining({
+                type: "not_allowed",
+                message: "Promotion usage exceeds the budget limit.",
+              })
+            )
+
+            const campaignAfter = (
+              await api.get(
+                `/admin/campaigns/${campaign.id}?fields=budget.*`,
+                adminHeaders
+              )
+            ).data.campaign
+
+            expect(campaignAfter.budget).toEqual(
+              expect.objectContaining({ used: 1, limit: 1 })
+            )
+          })
+
           it("should successfully complete cart without shipping for digital products", async () => {
             /**
              * Product has a shipping profile so cart item should not require shipping
