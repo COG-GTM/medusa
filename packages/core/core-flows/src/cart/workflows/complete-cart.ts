@@ -43,6 +43,7 @@ import { compensatePaymentIfNeededStep } from "../steps/compensate-payment-if-ne
 import { reserveInventoryStep } from "../steps/reserve-inventory"
 import { completeCartFields } from "../utils/fields"
 import { prepareConfirmInventoryInput } from "../utils/prepare-confirm-inventory-input"
+import { updateTaxLinesWorkflow } from "./update-tax-lines"
 import {
   prepareAdjustmentsData,
   prepareLineItemData,
@@ -109,6 +110,15 @@ export const completeCartWorkflowId = "complete-cart"
  *
  * If you need to change the cart before completing it, do so in a separate step or workflow that runs before `completeCartWorkflow`,
  * and refresh the cart's payment collection so that the payment session's amount matches the new total.
+ *
+ * ## Tax Lines Revalidation
+ *
+ * If the cart's region has `automatic_taxes` enabled and the cart has a shipping address with a country code, the workflow
+ * recalculates the cart's tax lines using the {@link updateTaxLinesWorkflow} before creating the order. This ensures the order's
+ * tax lines match the current tax context, even if tax rates changed or the cart was mutated without recalculating its taxes.
+ * The payment session's amount isn't refreshed, as explained in the Payment Validation section.
+ *
+ * If `automatic_taxes` is disabled, taxes are managed manually, so the workflow keeps the cart's existing tax lines.
  *
  * ## Payment Authorization and Failure Handling
  *
@@ -405,6 +415,74 @@ export const completeCartWorkflow = createWorkflow(
       cart: cartData.data,
     })
 
+    const revalidatedTaxLines = when(
+      "revalidate-cart-tax-lines",
+      { orderId, cart: cartData.data },
+      ({ orderId, cart }) => {
+        return (
+          !orderId &&
+          !!cart.region?.automatic_taxes &&
+          !!cart.shipping_address?.country_code
+        )
+      }
+    ).then(() => {
+      updateTaxLinesWorkflow.runAsStep({
+        input: { cart_id: input.id },
+      })
+
+      const { data } = useQueryGraphStep({
+        entity: "cart",
+        fields: [
+          "items.id",
+          "items.tax_lines.*",
+          "shipping_methods.id",
+          "shipping_methods.tax_lines.*",
+        ],
+        filters: { id: input.id },
+        options: {
+          isList: false,
+        },
+      }).config({
+        name: "revalidated-tax-lines-query",
+      })
+
+      return data
+    })
+
+    const taxedCart = transform(
+      { cart: cartData.data, revalidatedTaxLines },
+      ({ cart, revalidatedTaxLines }) => {
+        if (!revalidatedTaxLines) {
+          return cart
+        }
+
+        const itemTaxLines = new Map(
+          (revalidatedTaxLines.items ?? []).map((item) => [
+            item.id,
+            item.tax_lines ?? [],
+          ])
+        )
+        const shippingTaxLines = new Map(
+          (revalidatedTaxLines.shipping_methods ?? []).map((sm) => [
+            sm.id,
+            sm.tax_lines ?? [],
+          ])
+        )
+
+        return {
+          ...cart,
+          items: (cart.items ?? []).map((item) => ({
+            ...item,
+            tax_lines: itemTaxLines.get(item.id) ?? [],
+          })),
+          shipping_methods: (cart.shipping_methods ?? []).map((sm) => ({
+            ...sm,
+            tax_lines: shippingTaxLines.get(sm.id) ?? [],
+          })),
+        }
+      }
+    )
+
     // If order ID does not exist, we are completing the cart for the first time
     const order = when("create-order", { orderId }, ({ orderId }) => {
       return !orderId
@@ -453,7 +531,7 @@ export const completeCartWorkflow = createWorkflow(
         }
       )
 
-      const cartToOrder = transform({ cart: cartData.data }, ({ cart }) => {
+      const cartToOrder = transform({ cart: taxedCart }, ({ cart }) => {
         const allItems = (cart.items ?? []).map((item) => {
           const input: PrepareLineItemDataInput = {
             item,
