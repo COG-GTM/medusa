@@ -34,6 +34,7 @@ import { createOrdersStep } from "../../order/steps/create-orders"
 import { authorizePaymentSessionStep } from "../../payment/steps/authorize-payment-session"
 import { registerUsageStep } from "../../promotion/steps/register-usage"
 import {
+  markCartAsCompletedStep,
   updateCartsStep,
   validateCartItemsStep,
   validateCartPaymentsStep,
@@ -394,6 +395,17 @@ export const completeCartWorkflow = createWorkflow(
 
     // this needs to be before the validation step
     const paymentSessions = validateCartPaymentsStep({ cart: cartData.data })
+
+    // Atomically claims the cart so that, if the cart lock doesn't serialize
+    // concurrent completions (e.g. a per-instance in-memory lock), only one of
+    // them can create an order. It runs before the payment compensation so that
+    // a rejected request never refunds the payment of the winning one.
+    when("claim-cart", { orderId }, ({ orderId }) => {
+      return !orderId
+    }).then(() => {
+      markCartAsCompletedStep({ id: input.id })
+    })
+
     // purpose of this step is to run compensation if cart completion fails
     // and tries to refund the payment if captured
     compensatePaymentIfNeededStep({
