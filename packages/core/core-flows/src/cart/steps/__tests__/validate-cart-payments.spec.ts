@@ -38,7 +38,10 @@ describe("validateCartPaymentsStep", () => {
   const workflow = createWorkflow(
     "validate-cart-payments-step-test",
     (input: any) => {
-      const result = validateCartPaymentsStep({ cart: input.cart })
+      const result = validateCartPaymentsStep({
+        cart: input.cart,
+        order_id: input.order_id,
+      })
       return new WorkflowResponse(result)
     }
   )
@@ -140,7 +143,21 @@ describe("validateCartPaymentsStep", () => {
     ])
   })
 
-  it("should skip amount validation when the cart is already completed", async () => {
+  it("should skip amount validation when an order already exists for the cart", async () => {
+    const cart = buildCart({
+      total: 4000,
+      collectionAmount: 3000,
+      sessionAmount: 3000,
+    })
+
+    const { result } = await workflow(container).run({
+      input: { cart, order_id: "order_123" },
+    })
+
+    expect(result).toEqual([expect.objectContaining({ id: "payses_123" })])
+  })
+
+  it("should validate amounts for a completed cart without an order", async () => {
     const cart = buildCart({
       total: 4000,
       collectionAmount: 3000,
@@ -148,10 +165,13 @@ describe("validateCartPaymentsStep", () => {
     })
     cart.completed_at = new Date()
 
-    const { result } = await workflow(container).run({
+    const { errors } = await workflow(container).run({
       input: { cart },
+      throwOnError: false,
     })
 
-    expect(result).toEqual([expect.objectContaining({ id: "payses_123" })])
+    expect(errors[0].error).toEqual(
+      expect.objectContaining({ type: "invalid_data" })
+    )
   })
 })

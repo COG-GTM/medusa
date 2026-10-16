@@ -393,7 +393,10 @@ export const completeCartWorkflow = createWorkflow(
     validateCartItemsStep({ cart: cartData.data })
 
     // this needs to be before the validation step
-    const paymentSessions = validateCartPaymentsStep({ cart: cartData.data })
+    const paymentSessions = validateCartPaymentsStep({
+      cart: cartData.data,
+      order_id: orderId,
+    })
     // purpose of this step is to run compensation if cart completion fails
     // and tries to refund the payment if captured
     compensatePaymentIfNeededStep({

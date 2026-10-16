@@ -17,6 +17,11 @@ export interface ValidateCartPaymentsStepInput {
    * The cart to validate payment sessions for.
    */
   cart: CartWorkflowDTO
+  /**
+   * The ID of the order already created from the cart, if any. When set, the
+   * amount checks are skipped so retries can return the existing order.
+   */
+  order_id?: string
 }
 
 export const validateCartPaymentsStepId = "validate-cart-payments"
@@ -49,8 +54,8 @@ export const validateCartPaymentsStep = createStep(
         raw_total: rawTotal,
         credit_line_total,
         region_id: regionId,
-        completed_at: completedAt,
       },
+      order_id: existingOrderId,
     } = data
 
     const canSkipPayment =
@@ -88,15 +93,13 @@ export const validateCartPaymentsStep = createStep(
       )
     }
 
-    // Mirrors the comparison used by refreshPaymentCollectionForCartWorkflow.
-    // Already completed carts are skipped so idempotent retries still return
-    // the existing order.
+    // Mirrors the comparison used by refreshPaymentCollectionForCartWorkflow
     const { raw_amount: collectionRawAmount } = paymentCollection as {
       raw_amount?: BigNumberInput
     }
 
     if (
-      !completedAt &&
+      !existingOrderId &&
       !MathBN.eq(
         collectionRawAmount ?? paymentCollection.amount,
         rawTotal ?? total
@@ -113,7 +116,7 @@ export const validateCartPaymentsStep = createStep(
     // it against the cart's numeric total.
     const [sessionToAuthorize] = paymentsToProcess
 
-    if (!completedAt && !MathBN.eq(sessionToAuthorize.amount, total)) {
+    if (!existingOrderId && !MathBN.eq(sessionToAuthorize.amount, total)) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Payment session ${sessionToAuthorize.id} amount (${sessionToAuthorize.amount}) does not match the cart total (${total}). Refresh the cart's payment sessions before completing the cart.`
