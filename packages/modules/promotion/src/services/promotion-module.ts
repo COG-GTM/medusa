@@ -243,15 +243,13 @@ export default class PromotionModuleService
         continue
       }
 
-      const enforceLimit = !!campaignBudget.limit
-
       if (campaignBudget.type === CampaignBudgetType.SPEND) {
         const current = budgets.get(campaignBudget.id)?.amount ?? 0
 
         budgets.set(campaignBudget.id, {
           id: campaignBudget.id,
           amount: MathBN.add(current, computedAction.amount),
-          enforceLimit,
+          enforceLimit: true,
         })
       }
 
@@ -263,7 +261,7 @@ export default class PromotionModuleService
         budgets.set(campaignBudget.id, {
           id: campaignBudget.id,
           amount: 1,
-          enforceLimit,
+          enforceLimit: true,
         })
 
         countedCodes.add(promotion.code!)
@@ -404,9 +402,12 @@ export default class PromotionModuleService
       const query = knex("promotion_campaign_budget").where("id", budget.id)
 
       if (budget.enforceLimit) {
-        query.whereRaw(`("limit" is null or "used" + ?::numeric <= "limit")`, [
-          amount,
-        ])
+        // Evaluated against the locked row, so a limit set concurrently by an
+        // admin is enforced. A null (or 0) limit means unlimited, as before.
+        query.whereRaw(
+          `("limit" is null or "limit" = 0 or "used" + ?::numeric <= "limit")`,
+          [amount]
+        )
       }
 
       const updated = await query
