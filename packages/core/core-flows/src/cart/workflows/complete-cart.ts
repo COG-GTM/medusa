@@ -3,7 +3,6 @@ import {
   CartWorkflowDTO,
   LinkDefinition,
   PromotionDTO,
-  UsageComputedActions,
 } from "@medusajs/framework/types"
 import {
   EventPriority,
@@ -43,6 +42,7 @@ import { compensatePaymentIfNeededStep } from "../steps/compensate-payment-if-ne
 import { reserveInventoryStep } from "../steps/reserve-inventory"
 import { completeCartFields } from "../utils/fields"
 import { prepareConfirmInventoryInput } from "../utils/prepare-confirm-inventory-input"
+import { preparePromotionUsageComputedActions } from "../utils/prepare-promotion-usage"
 import {
   prepareAdjustmentsData,
   prepareLineItemData,
@@ -579,32 +579,8 @@ export const completeCartWorkflow = createWorkflow(
       const promotionUsage = transform(
         { cart: cartData.data },
         ({ cart }: { cart: CartWorkflowDTO }) => {
-          const promotionUsage: UsageComputedActions[] = []
-
-          const itemAdjustments = (cart.items ?? [])
-            .map((item) => item.adjustments ?? [])
-            .flat(1)
-
-          const shippingAdjustments = (cart.shipping_methods ?? [])
-            .map((item) => item.adjustments ?? [])
-            .flat(1)
-
-          for (const adjustment of itemAdjustments) {
-            promotionUsage.push({
-              amount: adjustment.amount,
-              code: adjustment.code!,
-            })
-          }
-
-          for (const adjustment of shippingAdjustments) {
-            promotionUsage.push({
-              amount: adjustment.amount,
-              code: adjustment.code!,
-            })
-          }
-
           return {
-            computedActions: promotionUsage,
+            computedActions: preparePromotionUsageComputedActions(cart),
             registrationContext: {
               customer_id: cart.customer?.id || null,
               customer_email: cart.email || null,
