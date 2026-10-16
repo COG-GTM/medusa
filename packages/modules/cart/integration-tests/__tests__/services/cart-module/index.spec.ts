@@ -325,6 +325,28 @@ moduleIntegrationTestRunner<ICartModuleService>({
           expect(cart.completed_at).toBeInstanceOf(Date)
         })
 
+        it("should reclaim a cart completed before the given date", async () => {
+          const [createdCart] = await service.createCarts([
+            {
+              currency_code: "eur",
+            },
+          ])
+
+          expect(await service.markCartAsCompleted(createdCart.id)).toBe(true)
+
+          expect(
+            await service.markCartAsCompleted(createdCart.id, {
+              reclaimCompletedBefore: new Date(Date.now() - 60 * 1000),
+            })
+          ).toBe(false)
+
+          expect(
+            await service.markCartAsCompleted(createdCart.id, {
+              reclaimCompletedBefore: new Date(Date.now() + 60 * 1000),
+            })
+          ).toBe(true)
+        })
+
         it("should return false if the cart does not exist", async () => {
           expect(await service.markCartAsCompleted("none-existing")).toBe(
             false

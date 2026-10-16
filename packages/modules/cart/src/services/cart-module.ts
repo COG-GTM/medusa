@@ -350,14 +350,16 @@ export default class CartModuleService
   @InjectManager()
   async markCartAsCompleted(
     cartId: string,
+    options: { reclaimCompletedBefore?: Date } = {},
     @MedusaContext() sharedContext: Context = {}
   ): Promise<boolean> {
-    return await this.markCartAsCompleted_(cartId, sharedContext)
+    return await this.markCartAsCompleted_(cartId, options, sharedContext)
   }
 
   @InjectTransactionManager()
   protected async markCartAsCompleted_(
     cartId: string,
+    options: { reclaimCompletedBefore?: Date },
     @MedusaContext() sharedContext: Context = {}
   ): Promise<boolean> {
     const manager = sharedContext.transactionManager as SqlEntityManager
@@ -367,7 +369,16 @@ export default class CartModuleService
     // the row lock and only one of them can transition the cart to completed.
     const affectedRows = await manager.nativeUpdate(
       Cart.name,
-      { id: cartId, completed_at: null, deleted_at: null },
+      {
+        id: cartId,
+        deleted_at: null,
+        $or: [
+          { completed_at: null },
+          ...(options.reclaimCompletedBefore
+            ? [{ completed_at: { $lt: options.reclaimCompletedBefore } }]
+            : []),
+        ],
+      },
       { completed_at: now, updated_at: now }
     )
 

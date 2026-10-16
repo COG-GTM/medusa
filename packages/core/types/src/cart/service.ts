@@ -308,6 +308,9 @@ export interface ICartModuleService extends IModuleService {
    * completed at most once, even when multiple completions race.
    *
    * @param {string} cartId - The cart's ID.
+   * @param {object} options - Options to configure the operation.
+   * @param {Date} options.reclaimCompletedBefore - If set, a cart whose `completed_at` is older than this date is
+   * also marked as completed again. Use it to recover carts whose completion was abandoned.
    * @param {Context} sharedContext - A context used to share resources, such as transaction manager, between the application and the module.
    * @returns {Promise<boolean>} Whether the cart was marked as completed by this call. `false` means the cart
    * doesn't exist or was already completed.
@@ -315,7 +318,11 @@ export interface ICartModuleService extends IModuleService {
    * @example
    * const isMarked = await cartModuleService.markCartAsCompleted("cart_123")
    */
-  markCartAsCompleted(cartId: string, sharedContext?: Context): Promise<boolean>
+  markCartAsCompleted(
+    cartId: string,
+    options?: { reclaimCompletedBefore?: Date },
+    sharedContext?: Context
+  ): Promise<boolean>
 
   /**
    * This method deletes carts by their IDs.

@@ -1268,6 +1268,76 @@ medusaIntegrationTestRunner({
 
             await expectSingleOrder({ cart, salesChannel, results })
           })
+
+          it("should complete a cart whose previous completion was abandoned", async () => {
+            const { cart } = await prepareCart({ unitPrice: 0 })
+
+            await cartModuleService.updateCarts(cart.id, {
+              completed_at: new Date(Date.now() - 10 * 60 * 1000),
+            })
+
+            const { result } = await completeCartWorkflow(appContainer).run({
+              input: { id: cart.id },
+            })
+
+            const { data: orderCartLinks } = await query.graph({
+              entity: "order_cart",
+              fields: ["order_id"],
+              filters: { cart_id: cart.id },
+            })
+
+            expect(orderCartLinks).toEqual([{ order_id: result.id }])
+          })
+
+          it("should reject a completion while another one is in progress without refunding its captured payment", async () => {
+            const { cart } = await prepareCart({ unitPrice: 3000 })
+
+            const {
+              data: [cartWithSessions],
+            } = await query.graph({
+              entity: "cart",
+              fields: ["payment_collection.payment_sessions.id"],
+              filters: { id: cart.id },
+            })
+            const paymentSessionId =
+              cartWithSessions.payment_collection.payment_sessions[0].id
+
+            const payment = await paymentModule.authorizePaymentSession(
+              paymentSessionId,
+              {}
+            )
+            if (!payment.captured_at) {
+              await paymentModule.capturePayment({ payment_id: payment.id })
+            }
+
+            // Another request has just claimed the cart and hasn't linked its order yet
+            await cartModuleService.updateCarts(cart.id, {
+              completed_at: new Date(),
+            })
+
+            const { errors } = await completeCartWorkflow(appContainer).run({
+              input: { id: cart.id },
+              throwOnError: false,
+            })
+
+            expect(errors[0].error).toEqual(
+              expect.objectContaining({
+                type: MedusaError.Types.CONFLICT,
+                message: `Cart ${cart.id} is already being completed by another request`,
+              })
+            )
+
+            const {
+              data: [paymentAfter],
+            } = await query.graph({
+              entity: "payment",
+              fields: ["id", "captured_at", "refunds.id"],
+              filters: { id: payment.id },
+            })
+
+            expect(paymentAfter.captured_at).toBeTruthy()
+            expect(paymentAfter.refunds).toEqual([])
+          })
         })
 
         it("should clear events when complete cart fails after emitting events", async () => {
