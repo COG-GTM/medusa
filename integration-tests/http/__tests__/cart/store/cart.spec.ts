@@ -3644,6 +3644,194 @@ medusaIntegrationTestRunner({
               ])
             })
           })
+
+          describe("tax line revalidation", () => {
+            const taxFields = [
+              "+tax_total",
+              "+item_tax_total",
+              "+shipping_tax_total",
+              "*items.tax_lines",
+              "*shipping_methods.tax_lines",
+            ].join(",")
+
+            const fetchCartWithTaxes = async (cartId: string) =>
+              (
+                await api.get(
+                  `/store/carts/${cartId}?fields=${taxFields}`,
+                  storeHeaders
+                )
+              ).data.cart
+
+            const fetchOrderWithTaxes = async (orderId: string) =>
+              (
+                await api.get(
+                  `/admin/orders/${orderId}?fields=${taxFields}`,
+                  adminHeaders
+                )
+              ).data.order
+
+            const getTaxRateIds = (taxedCart) => [
+              ...new Set<string>(
+                [
+                  ...taxedCart.items.flatMap((i) => i.tax_lines),
+                  ...taxedCart.shipping_methods.flatMap((sm) => sm.tax_lines),
+                ]
+                  .map((tl) => tl.tax_rate_id)
+                  .filter(Boolean)
+              ),
+            ]
+
+            const updateTaxRates = async (ids: string[], rate: number) => {
+              for (const id of ids) {
+                await api.post(`/admin/tax-rates/${id}`, { rate }, adminHeaders)
+              }
+            }
+
+            const completeCart = async (cartId: string) => {
+              const paymentCollection = (
+                await api.post(
+                  `/store/payment-collections`,
+                  { cart_id: cartId },
+                  storeHeaders
+                )
+              ).data.payment_collection
+
+              await api.post(
+                `/store/payment-collections/${paymentCollection.id}/payment-sessions`,
+                { provider_id: "pp_system_default" },
+                storeHeaders
+              )
+
+              const response = await api.post(
+                `/store/carts/${cartId}/complete`,
+                {},
+                storeHeaders
+              )
+
+              expect(response.status).toEqual(200)
+              expect(response.data.type).toEqual("order")
+
+              return response.data.order
+            }
+
+            it("should recalculate stale tax lines before creating the order when the region has automatic taxes", async () => {
+              const initialCart = await fetchCartWithTaxes(cart.id)
+              const originalItemRate = initialCart.items[0].tax_lines[0].rate
+              const originalShippingRate =
+                initialCart.shipping_methods[0].tax_lines[0].rate
+              const newRate = 15
+
+              expect(originalItemRate).not.toEqual(newRate)
+              expect(originalShippingRate).not.toEqual(newRate)
+
+              const rateIds = getTaxRateIds(initialCart)
+              expect(rateIds.length).toBeGreaterThan(0)
+              await updateTaxRates(rateIds, newRate)
+
+              await api.post(
+                `/store/carts/${cart.id}/line-items/${initialCart.items[0].id}`,
+                { quantity: 2 },
+                storeHeaders
+              )
+
+              // The cart's tax lines are a stale snapshot of the old rates
+              const staleCart = await fetchCartWithTaxes(cart.id)
+              expect(staleCart.items[0].quantity).toEqual(2)
+              expect(staleCart.items[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: originalItemRate }),
+              ])
+
+              // A cart created from scratch gets tax lines for the current rates
+              const controlCart = (
+                await api.post(
+                  `/store/carts`,
+                  {
+                    currency_code: "usd",
+                    sales_channel_id: salesChannel.id,
+                    region_id: region.id,
+                    shipping_address: shippingAddressData,
+                    items: [
+                      { variant_id: product.variants[0].id, quantity: 2 },
+                    ],
+                    promo_codes: [promotion.code],
+                  },
+                  storeHeadersWithCustomer
+                )
+              ).data.cart
+
+              await api.post(
+                `/store/carts/${controlCart.id}/shipping-methods`,
+                {
+                  option_id: staleCart.shipping_methods[0].shipping_option_id,
+                },
+                storeHeaders
+              )
+
+              const recalculatedCart = await fetchCartWithTaxes(controlCart.id)
+              expect(recalculatedCart.items[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: newRate }),
+              ])
+              expect(recalculatedCart.tax_total).not.toEqual(
+                staleCart.tax_total
+              )
+
+              const createdOrder = await completeCart(cart.id)
+              const order = await fetchOrderWithTaxes(createdOrder.id)
+
+              expect(order.items[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: newRate }),
+              ])
+              expect(order.shipping_methods[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: newRate }),
+              ])
+              expect(order.item_tax_total).toEqual(
+                recalculatedCart.item_tax_total
+              )
+              expect(order.shipping_tax_total).toEqual(
+                recalculatedCart.shipping_tax_total
+              )
+              expect(order.tax_total).toEqual(recalculatedCart.tax_total)
+            })
+
+            it("should keep the cart's existing tax lines when the region has automatic taxes disabled", async () => {
+              await api.post(
+                `/admin/regions/${region.id}`,
+                { automatic_taxes: false },
+                adminHeaders
+              )
+
+              const initialCart = await fetchCartWithTaxes(cart.id)
+              const originalItemRate = initialCart.items[0].tax_lines[0].rate
+              const originalShippingRate =
+                initialCart.shipping_methods[0].tax_lines[0].rate
+              const newRate = 15
+
+              expect(originalItemRate).not.toEqual(newRate)
+
+              await updateTaxRates(getTaxRateIds(initialCart), newRate)
+
+              await api.post(
+                `/store/carts/${cart.id}/line-items/${initialCart.items[0].id}`,
+                { quantity: 2 },
+                storeHeaders
+              )
+
+              const cartBeforeCompletion = await fetchCartWithTaxes(cart.id)
+
+              const createdOrder = await completeCart(cart.id)
+              const order = await fetchOrderWithTaxes(createdOrder.id)
+
+              // Taxes are managed manually (e.g. via POST /store/carts/:id/taxes),
+              // so completion must not silently re-run the tax provider
+              expect(order.items[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: originalItemRate }),
+              ])
+              expect(order.shipping_methods[0].tax_lines).toEqual([
+                expect.objectContaining({ rate: originalShippingRate }),
+              ])
+              expect(order.tax_total).toEqual(cartBeforeCompletion.tax_total)
+            })
+          })
         })
 
         it("should preserve tax line data field on order after cart completion", async () => {
