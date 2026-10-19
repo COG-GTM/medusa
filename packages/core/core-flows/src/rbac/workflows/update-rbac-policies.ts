@@ -53,12 +53,10 @@ export const updateRbacPoliciesWorkflow = createWorkflow(
         { input, policies },
         ({ input, policies }) => {
           const actions = policies.flatMap((policy) => {
-            const resource = (
-              input.update.resource ?? policy.resource
-            ).toLowerCase()
-            const operation = (
-              input.update.operation ?? policy.operation
-            ).toLowerCase()
+            const resource =
+              input.update.resource?.toLowerCase() || policy.resource
+            const operation =
+              input.update.operation?.toLowerCase() || policy.operation
 
             if (
               resource === policy.resource &&
