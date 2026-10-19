@@ -359,6 +359,26 @@ medusaIntegrationTestRunner({
             expect(error.response.status).toEqual(403)
           })
 
+          it("should not allow blanking the super admin policy's resource", async () => {
+            const error = await api
+              .post(
+                `/admin/rbac/policies/rpol_super_admin`,
+                { resource: "" },
+                policyEditorHeaders
+              )
+              .catch((e) => e)
+
+            expect(error.response.status).toEqual(403)
+
+            const { data } = await api.get(
+              `/admin/rbac/policies/rpol_super_admin`,
+              adminHeaders
+            )
+            expect(data.policy).toEqual(
+              expect.objectContaining({ resource: "*", operation: "*" })
+            )
+          })
+
           it("should not allow rewriting a policy the actor does not hold", async () => {
             const error = await api
               .post(
