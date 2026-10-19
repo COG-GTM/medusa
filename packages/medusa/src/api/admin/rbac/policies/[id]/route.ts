@@ -68,6 +68,8 @@ export const POST = async (
 
   const { result } = await updateRbacPoliciesWorkflow(req.scope).run({
     input: {
+      actor_id: req.auth_context.actor_id,
+      actor: req.auth_context.actor_type,
       selector: { id: req.params.id },
       update: req.validatedBody,
     },
