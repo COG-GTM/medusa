@@ -255,6 +255,206 @@ medusaIntegrationTestRunner({
             })
           )
         })
+        describe("as an actor holding only rbac_policy:update", () => {
+          const policyEditorHeaders = { headers: { ...adminHeaders.headers } }
+          let rbacPolicyUpdateId: string
+          let productReadId: string
+
+          beforeEach(async () => {
+            const rbacModule = container.resolve(Modules.RBAC)
+
+            const ensurePolicy = async (params: {
+              key: string
+              resource: string
+              operation: string
+              name: string
+            }) => {
+              const [existing] = await rbacModule.listRbacPolicies({
+                key: params.key,
+              })
+              if (existing) {
+                return existing
+              }
+              const [created] = await rbacModule.createRbacPolicies([params])
+              return created
+            }
+
+            const rbacPolicyUpdate = await ensurePolicy({
+              key: "rbac_policy:update",
+              resource: "rbac_policy",
+              operation: "update",
+              name: "Update Policies",
+            })
+            const productRead = await ensurePolicy({
+              key: "product:read",
+              resource: "product",
+              operation: "read",
+              name: "Read Products",
+            })
+            rbacPolicyUpdateId = rbacPolicyUpdate.id
+            productReadId = productRead.id
+
+            const role = await rbacModule.createRbacRoles({
+              name: "Policy Editor",
+            })
+            await rbacModule.createRbacRolePolicies([
+              { role_id: role.id, policy_id: rbacPolicyUpdate.id },
+            ])
+
+            await createAdminUser(
+              dbConnection,
+              policyEditorHeaders,
+              container,
+              {
+                email: "policy-editor@medusa.js",
+                roles: [role.id],
+              }
+            )
+          })
+
+          it("should not allow escalating an owned policy to *:*", async () => {
+            const error = await api
+              .post(
+                `/admin/rbac/policies/${rbacPolicyUpdateId}`,
+                { resource: "*", operation: "*" },
+                policyEditorHeaders
+              )
+              .catch((e) => e)
+
+            expect(error.response.status).toEqual(403)
+
+            const { data } = await api.get(
+              `/admin/rbac/policies/${rbacPolicyUpdateId}`,
+              adminHeaders
+            )
+            expect(data.policy).toEqual(
+              expect.objectContaining({
+                resource: "rbac_policy",
+                operation: "update",
+              })
+            )
+          })
+
+          it("should not allow changing only the operation to *", async () => {
+            const error = await api
+              .post(
+                `/admin/rbac/policies/${rbacPolicyUpdateId}`,
+                { operation: "*" },
+                policyEditorHeaders
+              )
+              .catch((e) => e)
+
+            expect(error.response.status).toEqual(403)
+          })
+
+          it("should not allow modifying the super admin policy", async () => {
+            const error = await api
+              .post(
+                `/admin/rbac/policies/rpol_super_admin`,
+                { resource: "rbac_policy", operation: "update" },
+                policyEditorHeaders
+              )
+              .catch((e) => e)
+
+            expect(error.response.status).toEqual(403)
+          })
+
+          it("should not allow blanking the super admin policy's resource", async () => {
+            const error = await api
+              .post(
+                `/admin/rbac/policies/rpol_super_admin`,
+                { resource: "" },
+                policyEditorHeaders
+              )
+              .catch((e) => e)
+
+            expect(error.response.status).toEqual(403)
+
+            const { data } = await api.get(
+              `/admin/rbac/policies/rpol_super_admin`,
+              adminHeaders
+            )
+            expect(data.policy).toEqual(
+              expect.objectContaining({ resource: "*", operation: "*" })
+            )
+          })
+
+          it("should not allow rewriting a policy the actor does not hold", async () => {
+            const error = await api
+              .post(
+                `/admin/rbac/policies/${productReadId}`,
+                { resource: "rbac_policy", operation: "update" },
+                policyEditorHeaders
+              )
+              .catch((e) => e)
+
+            expect(error.response.status).toEqual(403)
+          })
+
+          it("should allow updating non-permission fields", async () => {
+            const response = await api.post(
+              `/admin/rbac/policies/${productReadId}`,
+              { name: "Read Products (renamed)" },
+              policyEditorHeaders
+            )
+
+            expect(response.status).toEqual(200)
+            expect(response.data.policy).toEqual(
+              expect.objectContaining({
+                name: "Read Products (renamed)",
+                resource: "product",
+                operation: "read",
+              })
+            )
+          })
+          it("should allow renaming a policy when unchanged resource and operation are resent", async () => {
+            const response = await api.post(
+              `/admin/rbac/policies/${productReadId}`,
+              {
+                name: "Read Products v2",
+                resource: "PRODUCT",
+                operation: "read",
+              },
+              policyEditorHeaders
+            )
+
+            expect(response.status).toEqual(200)
+            expect(response.data.policy).toEqual(
+              expect.objectContaining({
+                name: "Read Products v2",
+                resource: "product",
+                operation: "read",
+              })
+            )
+          })
+        })
+
+        it("should allow a super admin to change a policy's resource and operation", async () => {
+          const createResponse = await api.post(
+            "/admin/rbac/policies",
+            {
+              key: "test_resource:read",
+              resource: "test_resource",
+              operation: "read",
+              name: "Read Test Resource",
+            },
+            adminHeaders
+          )
+
+          const response = await api.post(
+            `/admin/rbac/policies/${createResponse.data.policy.id}`,
+            { resource: "customer", operation: "update" },
+            adminHeaders
+          )
+
+          expect(response.status).toEqual(200)
+          expect(response.data.policy).toEqual(
+            expect.objectContaining({
+              resource: "customer",
+              operation: "update",
+            })
+          )
+        })
       })
 
       describe("DELETE /admin/rbac/policies/:id", () => {
