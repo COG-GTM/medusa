@@ -47,18 +47,31 @@ export const updateRbacPoliciesWorkflow = createWorkflow(
         filters: input.selector,
       }).config({ name: "get-rbac-policies-to-update" })
 
-      // The actor must hold both the permission the policy currently grants
-      // and the one it will grant after the update.
+      // For every policy whose grant actually changes, the actor must hold
+      // both the current grant and the resulting one.
       const validationData = transform(
         { input, policies },
         ({ input, policies }) => {
-          const actions = policies.flatMap((policy) => [
-            { resource: policy.resource, operation: policy.operation },
-            {
-              resource: input.update.resource ?? policy.resource,
-              operation: input.update.operation ?? policy.operation,
-            },
-          ])
+          const actions = policies.flatMap((policy) => {
+            const resource = (
+              input.update.resource ?? policy.resource
+            ).toLowerCase()
+            const operation = (
+              input.update.operation ?? policy.operation
+            ).toLowerCase()
+
+            if (
+              resource === policy.resource &&
+              operation === policy.operation
+            ) {
+              return []
+            }
+
+            return [
+              { resource: policy.resource, operation: policy.operation },
+              { resource, operation },
+            ]
+          })
 
           return {
             actor_id: input.actor_id!,

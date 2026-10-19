@@ -387,6 +387,26 @@ medusaIntegrationTestRunner({
               })
             )
           })
+          it("should allow renaming a policy when unchanged resource and operation are resent", async () => {
+            const response = await api.post(
+              `/admin/rbac/policies/${productReadId}`,
+              {
+                name: "Read Products v2",
+                resource: "PRODUCT",
+                operation: "read",
+              },
+              policyEditorHeaders
+            )
+
+            expect(response.status).toEqual(200)
+            expect(response.data.policy).toEqual(
+              expect.objectContaining({
+                name: "Read Products v2",
+                resource: "product",
+                operation: "read",
+              })
+            )
+          })
         })
 
         it("should allow a super admin to change a policy's resource and operation", async () => {
