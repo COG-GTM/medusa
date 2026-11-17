@@ -34,7 +34,7 @@ export const AdminGetPriceListParams = createSelectParams()
 
 export const AdminCreatePriceListPrice = z.object({
   currency_code: z.string(),
-  amount: z.number(),
+  amount: z.number().min(0),
   variant_id: z.string(),
   min_quantity: z.number().nullish(),
   max_quantity: z.number().nullish(),
@@ -48,7 +48,7 @@ export type AdminCreatePriceListPriceType = z.infer<
 export const AdminUpdatePriceListPrice = z.object({
   id: z.string(),
   currency_code: z.string().optional(),
-  amount: z.number().optional(),
+  amount: z.number().min(0).optional(),
   variant_id: z.string(),
   min_quantity: z.number().nullish(),
   max_quantity: z.number().nullish(),

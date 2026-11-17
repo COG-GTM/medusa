@@ -115,6 +115,29 @@ medusaIntegrationTestRunner({
 
     describe("/admin/price-lists", () => {
       describe("POST /admin/price-list", () => {
+        it("should reject negative prices", async () => {
+          const error = await api
+            .post(
+              "/admin/price-lists",
+              getPricelistFixture({
+                title: "Negative sale",
+                prices: [
+                  {
+                    amount: -5,
+                    currency_code: "usd",
+                    variant_id: product1.variants[0].id,
+                  },
+                ],
+              }),
+              adminHeaders
+            )
+            .catch((err) => err)
+
+          expect(error.response.status).toEqual(400)
+          expect(error.response.data.type).toEqual("invalid_data")
+          expect(error.response.data.message).toContain("amount")
+        })
+
         it("creates a price list", async () => {
           const payload = getPricelistFixture({
             title: "VIP Summer sale",

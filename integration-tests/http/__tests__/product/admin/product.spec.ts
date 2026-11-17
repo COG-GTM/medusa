@@ -1568,6 +1568,50 @@ medusaIntegrationTestRunner({
       })
 
       describe("POST /admin/products", () => {
+        it("should reject negative variant prices", async () => {
+          const createError = await api
+            .post(
+              "/admin/products",
+              getProductFixture({
+                title: "Negative price",
+                shipping_profile_id: shippingProfile.id,
+                variants: [
+                  {
+                    title: "Negative price variant",
+                    prices: [{ currency_code: "usd", amount: -5 }],
+                    options: { size: "large", color: "green" },
+                  },
+                ],
+              }),
+              adminHeaders
+            )
+            .catch((err) => err)
+
+          expect(createError.response.status).toEqual(400)
+          expect(createError.response.data.type).toEqual("invalid_data")
+          expect(createError.response.data.message).toContain("amount")
+
+          const variant = baseProduct.variants[0]
+          const updateError = await api
+            .post(
+              `/admin/products/${baseProduct.id}/variants/${variant.id}`,
+              { prices: [{ currency_code: "usd", amount: -5 }] },
+              adminHeaders
+            )
+            .catch((err) => err)
+
+          expect(updateError.response.status).toEqual(400)
+          expect(updateError.response.data.type).toEqual("invalid_data")
+          expect(updateError.response.data.message).toContain("amount")
+
+          const zeroPriced = await api.post(
+            `/admin/products/${baseProduct.id}/variants/${variant.id}`,
+            { prices: [{ currency_code: "usd", amount: 0 }] },
+            adminHeaders
+          )
+          expect(zeroPriced.status).toEqual(200)
+        })
+
         it("creates a product", async () => {
           const response = await api
             .post(
