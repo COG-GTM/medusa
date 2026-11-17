@@ -98,7 +98,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 400,
-                  currency_code: "eur",
+                  currency_code:"eur",
                   price_set_id: "price-set-1",
                   rules: {
                     region_id: "DE",
@@ -106,7 +106,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
                 },
                 {
                   amount: 600,
-                  currency_code: "eur",
+                  currency_code:"eur",
                   price_set_id: "price-set-1",
                 },
               ],
@@ -288,7 +288,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 400,
-                  currency_code: "eur",
+                  currency_code:"eur",
                   price_set_id: id,
                   rules: {
                     region_id: "DE",
@@ -296,7 +296,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
                 },
                 {
                   amount: 600,
-                  currency_code: "eur",
+                  currency_code:"eur",
                   price_set_id: id,
                 },
               ],
@@ -357,8 +357,8 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             priceSetBefore.id,
             {
               prices: [
-                { amount: 100, currency_code: "usd" },
-                { amount: 200, currency_code: "eur" },
+                { amount: 100, currency_code:"usd" },
+                { amount: 200, currency_code:"eur" },
               ],
             }
           )
@@ -370,7 +370,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
           expect(priceSetBefore.prices?.[0]).toEqual(
             expect.objectContaining({
               amount: 500,
-              currency_code: "usd",
+              currency_code:"usd",
             })
           )
 
@@ -379,11 +379,11 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             expect.arrayContaining([
               expect.objectContaining({
                 amount: 100,
-                currency_code: "usd",
+                currency_code:"usd",
               }),
               expect.objectContaining({
                 amount: 200,
-                currency_code: "eur",
+                currency_code:"eur",
               }),
             ])
           )
@@ -392,11 +392,11 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             expect.arrayContaining([
               expect.objectContaining({
                 amount: 100,
-                currency_code: "usd",
+                currency_code:"usd",
               }),
               expect.objectContaining({
                 amount: 200,
-                currency_code: "eur",
+                currency_code:"eur",
               }),
             ])
           )
@@ -415,7 +415,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 400,
-                  currency_code: "eur",
+                  currency_code:"eur",
                   price_set_id: priceSetBefore.id,
                 },
               ],
@@ -426,8 +426,8 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             priceSetBefore.id,
             {
               prices: [
-                { amount: 100, currency_code: "usd" },
-                { amount: 200, currency_code: "eur" },
+                { amount: 100, currency_code:"usd" },
+                { amount: 200, currency_code:"eur" },
               ],
             }
           )
@@ -440,7 +440,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
           expect(priceSetBefore.prices?.[0]).toEqual(
             expect.objectContaining({
               amount: 500,
-              currency_code: "usd",
+              currency_code:"usd",
             })
           )
 
@@ -450,11 +450,11 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             expect.arrayContaining([
               expect.objectContaining({
                 amount: 100,
-                currency_code: "usd",
+                currency_code:"usd",
               }),
               expect.objectContaining({
                 amount: 200,
-                currency_code: "eur",
+                currency_code:"eur",
               }),
             ])
           )
@@ -463,11 +463,11 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             expect.arrayContaining([
               expect.objectContaining({
                 amount: 100,
-                currency_code: "usd",
+                currency_code:"usd",
               }),
               expect.objectContaining({
                 amount: 200,
-                currency_code: "eur",
+                currency_code:"eur",
               }),
             ])
           )
@@ -482,7 +482,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             expect.arrayContaining([
               expect.objectContaining({
                 amount: 400,
-                currency_code: "eur",
+                currency_code:"eur",
                 price_set_id: priceSetBefore.id,
               }),
             ])
@@ -494,12 +494,12 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             prices: [
               {
                 amount: 100,
-                currency_code: "usd",
+                currency_code:"usd",
                 rules: { region_id: "1234" },
               },
               {
                 amount: 200,
-                currency_code: "usd",
+                currency_code:"usd",
                 rules: { region_id: "1234" },
               },
             ],
@@ -512,7 +512,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
           expect(priceSet.prices).toEqual([
             expect.objectContaining({
               amount: 200,
-              currency_code: "usd",
+              currency_code:"usd",
               price_rules: [
                 expect.objectContaining({
                   attribute: "region_id",
@@ -531,7 +531,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: {
                     region_id: "1",
                   },
@@ -545,7 +545,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 expect.objectContaining({
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules_count: 1,
                 }),
               ],
@@ -590,14 +590,14 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: {
                     region_id: "1",
                   },
                 },
                 {
                   amount: 150,
-                  currency_code: "usd",
+                  currency_code:"usd",
                 },
               ],
             },
@@ -608,11 +608,11 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: expect.arrayContaining([
                 expect.objectContaining({
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                 }),
                 expect.objectContaining({
                   amount: 150,
-                  currency_code: "usd",
+                  currency_code:"usd",
                 }),
               ]),
             })
@@ -625,7 +625,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: {
                     region_id: "1",
                     custom_rule: [
@@ -642,7 +642,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
                 },
                 {
                   amount: 150,
-                  currency_code: "usd",
+                  currency_code:"usd",
                 },
               ],
             },
@@ -654,7 +654,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: expect.arrayContaining([
                 expect.objectContaining({
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   price_rules: expect.arrayContaining([
                     expect.objectContaining({
                       attribute: "region_id",
@@ -675,7 +675,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
                 }),
                 expect.objectContaining({
                   amount: 150,
-                  currency_code: "usd",
+                  currency_code:"usd",
                 }),
               ]),
             })
@@ -689,7 +689,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
                 prices: [
                   {
                     amount: 100,
-                    currency_code: "usd",
+                    currency_code:"usd",
                     rules: {
                       custom_rule: [
                         {
@@ -714,7 +714,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
                 prices: [
                   {
                     amount: 100,
-                    currency_code: "usd",
+                    currency_code:"usd",
                     rules: {
                       custom_rule: [
                         {
@@ -794,12 +794,12 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: { region_id: "1234" },
                 },
                 {
                   amount: 200,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: { region_id: "1234" },
                 },
               ],
@@ -813,7 +813,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
           expect(priceSet.prices).toEqual([
             expect.objectContaining({
               amount: 200,
-              currency_code: "usd",
+              currency_code:"usd",
               price_rules: [
                 expect.objectContaining({
                   attribute: "region_id",
@@ -833,7 +833,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: { region_id: "1234" },
                 },
               ],
@@ -851,7 +851,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: expect.arrayContaining([
                 expect.objectContaining({
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                 }),
               ]),
             })
@@ -884,7 +884,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: { region_id: "region-1" },
                 },
               ],
@@ -894,7 +894,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 150,
-                  currency_code: "eur",
+                  currency_code:"eur",
                   rules: { region_id: "region-2" },
                 },
               ],
@@ -912,7 +912,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: expect.arrayContaining([
                 expect.objectContaining({
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                 }),
               ]),
             }),
@@ -921,7 +921,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: expect.arrayContaining([
                 expect.objectContaining({
                   amount: 150,
-                  currency_code: "eur",
+                  currency_code:"eur",
                 }),
               ]),
             }),
@@ -935,7 +935,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 100,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: {
                     region_id: "123",
                   },
@@ -950,7 +950,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
               prices: [
                 {
                   amount: 200,
-                  currency_code: "usd",
+                  currency_code:"usd",
                   rules: {
                     region_id: "123",
                     test: [{ value: 500, operator: "gte" }],
@@ -969,11 +969,11 @@ moduleIntegrationTestRunner<IPricingModuleService>({
           ).toEqual([
             expect.objectContaining({
               amount: 100,
-              currency_code: "usd",
+              currency_code:"usd",
             }),
             expect.objectContaining({
               amount: 200,
-              currency_code: "usd",
+              currency_code:"usd",
               price_rules: [
                 expect.objectContaining({
                   attribute: "region_id",
@@ -988,7 +988,7 @@ moduleIntegrationTestRunner<IPricingModuleService>({
             }),
             expect.objectContaining({
               amount: 500,
-              currency_code: "usd",
+              currency_code:"usd",
             }),
           ])
         })
