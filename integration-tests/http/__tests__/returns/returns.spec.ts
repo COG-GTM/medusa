@@ -1368,6 +1368,122 @@ medusaIntegrationTestRunner({
       })
     })
 
+    describe("Returning already received items", () => {
+      it("should reject admin and store returns for units that were already received", async () => {
+        const item = order.items[0]
+
+        const firstReturnId = (
+          await api.post(
+            "/admin/returns",
+            {
+              order_id: order.id,
+              location_id: location.id,
+            },
+            adminHeaders
+          )
+        ).data.return.id
+
+        await api.post(
+          `/admin/returns/${firstReturnId}/request-items`,
+          { items: [{ id: item.id, quantity: 1 }] },
+          adminHeaders
+        )
+        await api.post(
+          `/admin/returns/${firstReturnId}/shipping-method`,
+          { shipping_option_id: returnShippingOption.id },
+          adminHeaders
+        )
+        await api.post(
+          `/admin/returns/${firstReturnId}/request`,
+          {},
+          adminHeaders
+        )
+        await api.post(
+          `/admin/returns/${firstReturnId}/receive`,
+          {},
+          adminHeaders
+        )
+        await api.post(
+          `/admin/returns/${firstReturnId}/receive-items`,
+          { items: [{ id: item.id, quantity: 1 }] },
+          adminHeaders
+        )
+        await api.post(
+          `/admin/returns/${firstReturnId}/receive/confirm`,
+          {},
+          adminHeaders
+        )
+
+        const expectedMessage = `Cannot request to return more items than what was fulfilled for item ${item.id}.`
+
+        const storeOverReturn = await api
+          .post(
+            "/store/returns",
+            {
+              order_id: order.id,
+              items: [{ id: item.id, quantity: 2 }],
+              return_shipping: { option_id: returnShippingOption.id },
+            },
+            storeHeaders
+          )
+          .catch((e) => e)
+
+        expect(storeOverReturn.response.status).toEqual(400)
+        expect(storeOverReturn.response.data.message).toEqual(expectedMessage)
+
+        const storeReturn = (
+          await api.post(
+            "/store/returns",
+            {
+              order_id: order.id,
+              items: [{ id: item.id, quantity: 1 }],
+              return_shipping: { option_id: returnShippingOption.id },
+            },
+            storeHeaders
+          )
+        ).data.return
+
+        expect(storeReturn.items).toEqual([
+          expect.objectContaining({ item_id: item.id, quantity: 1 }),
+        ])
+
+        const secondReturnId = (
+          await api.post(
+            "/admin/returns",
+            {
+              order_id: order.id,
+              location_id: location.id,
+            },
+            adminHeaders
+          )
+        ).data.return.id
+
+        const adminOverReturn = await api
+          .post(
+            `/admin/returns/${secondReturnId}/request-items`,
+            { items: [{ id: item.id, quantity: 1 }] },
+            adminHeaders
+          )
+          .catch((e) => e)
+
+        expect(adminOverReturn.response.status).toEqual(400)
+        expect(adminOverReturn.response.data.message).toEqual(expectedMessage)
+
+        const updatedOrder = (
+          await api.get(`/admin/orders/${order.id}`, adminHeaders)
+        ).data.order
+
+        expect(updatedOrder.items[0].detail).toEqual(
+          expect.objectContaining({
+            quantity: 2,
+            fulfilled_quantity: 2,
+            return_requested_quantity: 1,
+            return_received_quantity: 1,
+          })
+        )
+      })
+    })
+
     describe("Store Returns lifecycle", () => {
       it("should request a return", async () => {
         const createdReturn = (

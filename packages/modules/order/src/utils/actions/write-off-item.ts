@@ -45,7 +45,10 @@ OrderChangeProcessing.registerActionType(ChangeActionType.WRITE_OFF_ITEM, {
       )
     }
 
-    const quantityAvailable = existing!.quantity ?? 0
+    const quantityAvailable = MathBN.sub(
+      existing!.quantity ?? 0,
+      existing!.detail?.written_off_quantity ?? 0
+    )
     const greater = MathBN.gt(action.details?.quantity, quantityAvailable)
     if (greater) {
       throw new MedusaError(
