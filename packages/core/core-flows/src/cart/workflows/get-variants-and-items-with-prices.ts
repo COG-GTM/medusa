@@ -13,6 +13,7 @@ import {
 import {
   filterObjectByKeys,
   isDefined,
+  MathBN,
   MedusaError,
   ProductStatus,
   simpleHash,
@@ -93,6 +94,7 @@ export const prepareVariantsAndItemsWithPricesStep = createStep(
     calculatedPriceSets,
   }: PrepareVariantsAndItemsWithPricesStepInput) => {
     const priceNotFound: string[] = []
+    const negativePrice: string[] = []
     const variantNotFoundOrPublished: string[] = []
 
     // Index the variants by id so the per-item lookup below is O(1) instead of a
@@ -150,6 +152,13 @@ export const prepareVariantsAndItemsWithPricesStep = createStep(
         input.unitPrice = calculatedPriceSet.calculated_amount
         input.isTaxInclusive =
           calculatedPriceSet.is_calculated_price_tax_inclusive
+
+        if (
+          isDefined(calculatedPriceSet.calculated_amount) &&
+          MathBN.lt(calculatedPriceSet.calculated_amount, 0)
+        ) {
+          negativePrice.push(item_.variant_id)
+        }
       }
 
       const preparedItem = prepareLineItemData(input)
@@ -172,6 +181,13 @@ export const prepareVariantsAndItemsWithPricesStep = createStep(
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Variants with IDs ${priceNotFound.join(", ")} do not have a price`
+      )
+    }
+
+    if (negativePrice.length > 0) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Variants with IDs ${negativePrice.join(", ")} have a negative price`
       )
     }
 
