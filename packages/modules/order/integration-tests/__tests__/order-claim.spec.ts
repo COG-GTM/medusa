@@ -244,6 +244,54 @@ moduleIntegrationTestRunner({
           })
         )
       })
+
+      it("should not leave a shipping method when a claim is rejected", async function () {
+        const createdOrder = await service.createOrders(input)
+        const item = createdOrder.items!.find((i) => i.title === "Item 1")!
+
+        await service.registerFulfillment({
+          order_id: createdOrder.id,
+          items: [{ id: item.id, quantity: item.quantity }],
+        })
+
+        const methodsBefore = await service.listOrderShippingMethods({})
+
+        const error = await service
+          .createClaim({
+            order_id: createdOrder.id,
+            type: ClaimType.REPLACE,
+            shipping_methods: [
+              {
+                shipping_option_id: "shipping_dhl_id",
+                name: "Claim method",
+                amount: 35,
+              },
+            ],
+            claim_items: [
+              {
+                id: item.id,
+                quantity: 5,
+                reason: "production_failure",
+              },
+            ],
+            return_shipping: {
+              name: "return shipping method",
+              amount: 10,
+              provider_id: "test_provider_id",
+            },
+          })
+          .catch((e) => e)
+
+        expect(error).toBeInstanceOf(Error)
+
+        const methodsAfter = await service.listOrderShippingMethods({})
+        expect(methodsAfter).toHaveLength(methodsBefore.length)
+
+        const claims = await service.listOrderClaims({
+          order_id: createdOrder.id,
+        })
+        expect(claims).toHaveLength(0)
+      })
     })
   },
 })

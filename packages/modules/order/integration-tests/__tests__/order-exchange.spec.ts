@@ -233,6 +233,59 @@ moduleIntegrationTestRunner({
           })
         )
       })
+
+      it("should not leave a shipping method when an exchange is rejected", async function () {
+        const createdOrder = await service.createOrders(input)
+        const item = createdOrder.items!.find((i) => i.title === "Item 1")!
+
+        await service.registerFulfillment({
+          order_id: createdOrder.id,
+          items: [{ id: item.id, quantity: item.quantity }],
+        })
+
+        const methodsBefore = await service.listOrderShippingMethods({})
+
+        const error = await service
+          .createExchange({
+            order_id: createdOrder.id,
+            shipping_methods: [
+              {
+                name: "Exchange method",
+                amount: 35,
+                provider_id: "dhl",
+              },
+            ],
+            return_items: [
+              {
+                id: item.id,
+                quantity: 5,
+              },
+            ],
+            additional_items: [
+              {
+                unit_price: 20,
+                quantity: 1,
+                title: "New item",
+              },
+            ],
+            return_shipping: {
+              name: "return shipping method",
+              amount: 10,
+              provider_id: "test_provider_id",
+            },
+          })
+          .catch((e) => e)
+
+        expect(error).toBeInstanceOf(Error)
+
+        const methodsAfter = await service.listOrderShippingMethods({})
+        expect(methodsAfter).toHaveLength(methodsBefore.length)
+
+        const exchanges = await service.listOrderExchanges({
+          order_id: createdOrder.id,
+        })
+        expect(exchanges).toHaveLength(0)
+      })
     })
   },
 })
