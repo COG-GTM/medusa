@@ -554,6 +554,83 @@ medusaIntegrationTestRunner({
         )
       })
 
+      it("should not import a product with a negative price", async () => {
+        let fileContent = await fs.readFile(
+          path.join(__dirname, "__fixtures__", "product-with-categories.csv"),
+          { encoding: "utf-8" }
+        )
+
+        fileContent = fileContent.replace(/prod_\w*\d*/g, baseProduct.id)
+        fileContent = fileContent.replace(/pcol_\w*\d*/g, baseCollection.id)
+        fileContent = fileContent.replace(/ptyp_\w*\d*/g, baseType.id)
+        fileContent = fileContent.replace(/pcat_\w*\d*/g, baseCategory.id)
+        fileContent = fileContent.replace(/tag-123/g, baseTag1.id)
+        fileContent = fileContent.replace(/tag-456/g, baseTag3.id)
+        fileContent = fileContent.replace(/new-tag/g, newTag.id)
+
+        fileContent = fileContent.replace(
+          /import-shipping-profile*/g,
+          shippingProfile.id
+        )
+
+        const rows = csv2json(fileContent)
+        rows.forEach((row) => {
+          row["Variant Price USD"] = -5
+        })
+
+        const csvContents = prepareCSVForImport(json2csv(rows), ",")
+        const { id } = await fileModule.createFiles({
+          filename: "test.csv",
+          content: csvContents,
+          mimeType: "text/csv",
+        })
+
+        const { body, meta } = getUploadReq({
+          name: "test.csv",
+          key: id,
+          size: csvContents.length,
+        })
+
+        const batchJobRes = await api.post(
+          "/admin/products/imports",
+          body,
+          meta
+        )
+
+        const transactionId = batchJobRes.data.transaction_id
+        const workflowEngine = getContainer().resolve(Modules.WORKFLOW_ENGINE)
+        const finished = new Promise<any>((resolve) => {
+          void workflowEngine.subscribe({
+            workflowId: "import-products-as-chunks",
+            transactionId,
+            subscriber: (event) => {
+              if (event.eventType === "onFinish") {
+                resolve(event)
+              }
+            },
+          })
+        })
+
+        await api.post(
+          `/admin/products/imports/${transactionId}/confirm`,
+          {},
+          meta
+        )
+
+        const { state, errors } = await finished
+        expect(state).not.toEqual("done")
+        expect(JSON.stringify(errors)).toContain(
+          "Price amount cannot be negative"
+        )
+
+        const [{ count }] = (
+          await dbConnection.raw(
+            "SELECT count(*)::int AS count FROM price WHERE amount < 0"
+          )
+        ).rows
+        expect(count).toEqual(0)
+      })
+
       it("should complain about non-existent fields being present in the CSV", async () => {
         let fileContent = await fs.readFile(
           path.join(__dirname, "__fixtures__", "unrelated-column.csv"),

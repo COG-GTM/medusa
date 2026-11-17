@@ -732,6 +732,83 @@ medusaIntegrationTestRunner({
           ).data.cart
         })
 
+        it("should return a 400 when adding a variant whose saved price is negative", async () => {
+          await dbConnection.raw(
+            `UPDATE price SET amount = -5, raw_amount = '{"value": "-5", "precision": 20}'
+             WHERE price_set_id IN (
+               SELECT price_set_id FROM product_variant_price_set WHERE variant_id = ?
+             )`,
+            [product.variants[0].id]
+          )
+
+          const error = await api
+            .post(
+              `/store/carts/${cart.id}/line-items`,
+              { variant_id: product.variants[0].id, quantity: 1 },
+              storeHeaders
+            )
+            .catch((e) => e)
+
+          expect(error.response.status).toEqual(400)
+          expect(error.response.data.type).toEqual("invalid_data")
+          expect(error.response.data.message).toContain("negative price")
+        })
+
+        it("should return a 400 when creating a cart with a variant whose saved price is negative", async () => {
+          await dbConnection.raw(
+            `UPDATE price SET amount = -5, raw_amount = '{"value": "-5", "precision": 20}'
+             WHERE price_set_id IN (
+               SELECT price_set_id FROM product_variant_price_set WHERE variant_id = ?
+             )`,
+            [product.variants[0].id]
+          )
+
+          const error = await api
+            .post(
+              `/store/carts`,
+              {
+                currency_code: "usd",
+                sales_channel_id: salesChannel.id,
+                region_id: region.id,
+                items: [{ variant_id: product.variants[0].id, quantity: 1 }],
+              },
+              storeHeaders
+            )
+            .catch((e) => e)
+
+          expect(error.response.status).toEqual(400)
+          expect(error.response.data.type).toEqual("invalid_data")
+          expect(error.response.data.message).toContain("negative price")
+        })
+
+        it("should return a 400 when refreshing a cart whose item price is now negative", async () => {
+          await dbConnection.raw(
+            `UPDATE price SET amount = -5, raw_amount = '{"value": "-5", "precision": 20}'
+             WHERE price_set_id IN (
+               SELECT price_set_id FROM product_variant_price_set WHERE variant_id = ?
+             )`,
+            [product.variants[0].id]
+          )
+
+          const error = await api
+            .post(
+              `/store/carts/${cart.id}`,
+              {
+                shipping_address: {
+                  ...shippingAddressData,
+                  country_code: "us",
+                  postal_code: "94017",
+                },
+              },
+              storeHeaders
+            )
+            .catch((e) => e)
+
+          expect(error.response.status).toEqual(400)
+          expect(error.response.data.type).toEqual("invalid_data")
+          expect(error.response.data.message).toContain("negative price")
+        })
+
         it("should add item to cart", async () => {
           const response = await api.post(
             `/store/carts/${cart.id}/line-items`,

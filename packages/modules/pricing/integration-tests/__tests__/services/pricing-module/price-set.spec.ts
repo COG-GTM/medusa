@@ -732,6 +732,43 @@ moduleIntegrationTestRunner<IPricingModuleService>({
           expect(error.message).toBe("value should be a number")
         })
 
+        it("should throw error when creating or updating a price with a negative amount", async () => {
+          const createError = await service
+            .createPriceSets([
+              { prices: [{ amount: -5, currency_code: "usd" }] },
+            ])
+            .catch((e) => e)
+
+          expect(createError.message).toBe(
+            "Price amount cannot be negative, received -5"
+          )
+
+          const [priceSet] = await service.createPriceSets([
+            { prices: [{ amount: 0, currency_code: "usd" }] },
+          ])
+
+          const updateError = await service
+            .updatePriceSets(priceSet.id, {
+              prices: [{ amount: -1, currency_code: "usd" }],
+            })
+            .catch((e) => e)
+
+          expect(updateError.message).toBe(
+            "Price amount cannot be negative, received -1"
+          )
+
+          const addError = await service
+            .addPrices({
+              priceSetId: priceSet.id,
+              prices: [{ amount: -1, currency_code: "eur" }],
+            })
+            .catch((e) => e)
+
+          expect(addError.message).toBe(
+            "Price amount cannot be negative, received -1"
+          )
+        })
+
         it("should create a priceSet successfully", async () => {
           await service.createPriceSets([
             {

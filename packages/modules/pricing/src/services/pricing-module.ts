@@ -929,6 +929,13 @@ export default class PricingModuleService
     const invalidOperatorError = `operator should be one of ${validOperatorsList}`
 
     data?.forEach((price) => {
+      if (isDefined(price.amount) && MathBN.lt(price.amount, 0)) {
+        throw new MedusaError(
+          MedusaError.Types.INVALID_DATA,
+          `Price amount cannot be negative, received ${price.amount}`
+        )
+      }
+
       const cleanRules = price.rules ? removeNullish(price.rules) : {}
 
       const rules = Object.entries(cleanRules).flatMap(([attribute, value]) => {
