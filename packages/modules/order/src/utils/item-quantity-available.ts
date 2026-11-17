@@ -76,6 +76,10 @@ export function getItemQuantityAvailable({
     )
   }
 
+  // the overlap can't be more than the units still counted as both returned
+  // and claimed
+  overlap = minBN(overlap, minBN(returned, claimed))
+
   let quantityAvailable = MathBN.sub(
     detail?.fulfilled_quantity ?? 0,
     MathBN.sub(MathBN.add(returned, claimed), overlap)

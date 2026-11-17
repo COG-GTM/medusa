@@ -1971,6 +1971,43 @@ medusaIntegrationTestRunner({
           `Cannot request to return more items than what was fulfilled for item ${item.id}.`
         )
       })
+
+      it("should only count the units still on a claim return whose quantity was reduced", async () => {
+        await fulfill(2)
+
+        const claimId = await createClaim()
+        await addClaimItem(claimId, 2)
+        await addClaimInboundItem(claimId, 2)
+
+        const preview = (
+          await api.get(`/admin/orders/${order.id}/preview`, adminHeaders)
+        ).data.order
+        const inboundAction = preview.items
+          .find((i) => i.id === item.id)
+          .actions.find((a) => a.action === "RETURN_ITEM")
+
+        await api.post(
+          `/admin/claims/${claimId}/inbound/items/${inboundAction.id}`,
+          { quantity: 1 },
+          adminHeaders
+        )
+        await requestClaim(claimId)
+
+        expect(await getItemDetail()).toEqual(
+          expect.objectContaining({
+            written_off_quantity: 2,
+            return_requested_quantity: 1,
+          })
+        )
+
+        const returnId = await createReturn()
+        const overReturn = await addReturnItem(returnId, 1).catch((e) => e)
+
+        expect(overReturn.response.status).toEqual(400)
+        expect(overReturn.response.data.message).toEqual(
+          `Cannot request to return more items than what was fulfilled for item ${item.id}.`
+        )
+      })
     })
 
     describe("GET /admin/claims/:id", () => {

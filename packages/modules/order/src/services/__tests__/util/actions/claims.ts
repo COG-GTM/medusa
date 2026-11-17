@@ -170,4 +170,15 @@ describe("Order Claim - Actions", function () {
       overReturnError
     )
   })
+
+  it("should not count more overlap than the units still returned and claimed", function () {
+    const afterReducedClaimReturn = withDetail({
+      written_off_quantity: 2,
+      return_requested_quantity: 1,
+    })
+
+    expect(() =>
+      apply(afterReducedClaimReturn, [returnAction(1)], { 1: 2 })
+    ).toThrow(overReturnError)
+  })
 })
