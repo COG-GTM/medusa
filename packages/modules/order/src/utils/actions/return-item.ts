@@ -4,6 +4,7 @@ import {
   MedusaError,
 } from "@medusajs/framework/utils"
 import { OrderChangeProcessing } from "../calculate-order-change"
+import { getItemQuantityAvailable } from "../item-quantity-available"
 import { setActionReference } from "../set-action-reference"
 
 OrderChangeProcessing.registerActionType(ChangeActionType.RETURN_ITEM, {
@@ -23,7 +24,7 @@ OrderChangeProcessing.registerActionType(ChangeActionType.RETURN_ITEM, {
 
     return MathBN.mult(existing.unit_price, action.details.quantity)
   },
-  validate({ action, currentOrder }) {
+  validate({ action, actions, currentOrder, options }) {
     const refId = action.details?.reference_id
     if (refId == null) {
       throw new MedusaError(
@@ -48,14 +49,12 @@ OrderChangeProcessing.registerActionType(ChangeActionType.RETURN_ITEM, {
       )
     }
 
-    const quantityAvailable = MathBN.sub(
-      existing!.detail?.fulfilled_quantity ?? 0,
-      MathBN.add(
-        existing!.detail?.return_requested_quantity ?? 0,
-        existing!.detail?.return_received_quantity ?? 0,
-        existing!.detail?.return_dismissed_quantity ?? 0
-      )
-    )
+    const quantityAvailable = getItemQuantityAvailable({
+      detail: existing.detail,
+      action,
+      actions,
+      claimReturnedQuantity: options?.claimReturnedQuantities?.[refId],
+    })
 
     const greater = MathBN.gt(action.details?.quantity, quantityAvailable)
     if (greater) {

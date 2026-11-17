@@ -1792,7 +1792,7 @@ medusaIntegrationTestRunner({
 
         expect(overClaim.response.status).toEqual(400)
         expect(overClaim.response.data.message).toEqual(
-          "Cannot claim more items than what was ordered."
+          `Cannot claim more items than what was fulfilled for item ${item.id}.`
         )
 
         const updatedOrder = (
@@ -1804,6 +1804,171 @@ medusaIntegrationTestRunner({
             quantity: 2,
             written_off_quantity: 2,
           })
+        )
+      })
+    })
+
+    describe("Returns and claims counting against each other", () => {
+      const fulfill = async (quantity) =>
+        await api.post(
+          `/admin/orders/${order.id}/fulfillments`,
+          { items: [{ id: item.id, quantity }] },
+          adminHeaders
+        )
+
+      const createClaim = async () =>
+        (
+          await api.post(
+            "/admin/claims",
+            { order_id: order.id, type: ClaimType.REFUND },
+            adminHeaders
+          )
+        ).data.claim.id
+
+      const addClaimItem = async (claimId, quantity) =>
+        await api.post(
+          `/admin/claims/${claimId}/claim-items`,
+          {
+            items: [
+              {
+                id: item.id,
+                reason: ClaimReason.PRODUCTION_FAILURE,
+                quantity,
+              },
+            ],
+          },
+          adminHeaders
+        )
+
+      const addClaimInboundItem = async (claimId, quantity) => {
+        await api.post(
+          `/admin/claims/${claimId}/inbound/items`,
+          {
+            items: [{ id: item.id, reason_id: returnReason.id, quantity }],
+          },
+          adminHeaders
+        )
+        await api.post(
+          `/admin/claims/${claimId}/inbound/shipping-method`,
+          { shipping_option_id: returnShippingOption.id },
+          adminHeaders
+        )
+      }
+
+      const requestClaim = async (claimId) =>
+        await api.post(`/admin/claims/${claimId}/request`, {}, adminHeaders)
+
+      const createReturn = async () =>
+        (
+          await api.post(
+            "/admin/returns",
+            { order_id: order.id, location_id: location.id },
+            adminHeaders
+          )
+        ).data.return.id
+
+      const addReturnItem = async (returnId, quantity) =>
+        await api.post(
+          `/admin/returns/${returnId}/request-items`,
+          { items: [{ id: item.id, quantity }] },
+          adminHeaders
+        )
+
+      const getItemDetail = async () =>
+        (await api.get(`/admin/orders/${order.id}`, adminHeaders)).data.order
+          .items[0].detail
+
+      it("should not allow claiming more units than were fulfilled", async () => {
+        await fulfill(1)
+
+        const claimId = await createClaim()
+        const overClaim = await addClaimItem(claimId, 2).catch((e) => e)
+
+        expect(overClaim.response.status).toEqual(400)
+        expect(overClaim.response.data.message).toEqual(
+          `Cannot claim more items than what was fulfilled for item ${item.id}.`
+        )
+
+        await addClaimItem(claimId, 1)
+        await requestClaim(claimId)
+
+        expect(await getItemDetail()).toEqual(
+          expect.objectContaining({
+            fulfilled_quantity: 1,
+            written_off_quantity: 1,
+          })
+        )
+      })
+
+      it("should not allow returning units that were claimed", async () => {
+        await fulfill(2)
+
+        const claimId = await createClaim()
+        await addClaimItem(claimId, 1)
+        await requestClaim(claimId)
+
+        const returnId = await createReturn()
+        const overReturn = await addReturnItem(returnId, 2).catch((e) => e)
+
+        expect(overReturn.response.status).toEqual(400)
+        expect(overReturn.response.data.message).toEqual(
+          `Cannot request to return more items than what was fulfilled for item ${item.id}.`
+        )
+
+        await addReturnItem(returnId, 1)
+      })
+
+      it("should not allow claiming units that are being returned", async () => {
+        await fulfill(2)
+
+        const returnId = await createReturn()
+        await addReturnItem(returnId, 1)
+        await api.post(
+          `/admin/returns/${returnId}/shipping-method`,
+          { shipping_option_id: returnShippingOption.id },
+          adminHeaders
+        )
+        await api.post(`/admin/returns/${returnId}/request`, {}, adminHeaders)
+
+        const claimId = await createClaim()
+        const overClaim = await addClaimItem(claimId, 2).catch((e) => e)
+
+        expect(overClaim.response.status).toEqual(400)
+        expect(overClaim.response.data.message).toEqual(
+          `Cannot claim more items than what was fulfilled for item ${item.id}.`
+        )
+
+        await addClaimItem(claimId, 1)
+      })
+
+      it("should count a unit a claim writes off and returns only once", async () => {
+        await fulfill(2)
+
+        const firstClaimId = await createClaim()
+        await addClaimItem(firstClaimId, 1)
+        await addClaimInboundItem(firstClaimId, 1)
+        await requestClaim(firstClaimId)
+
+        expect(await getItemDetail()).toEqual(
+          expect.objectContaining({
+            written_off_quantity: 1,
+            return_requested_quantity: 1,
+          })
+        )
+
+        const secondClaimId = await createClaim()
+        const overClaim = await addClaimItem(secondClaimId, 2).catch((e) => e)
+        expect(overClaim.response.status).toEqual(400)
+
+        await addClaimItem(secondClaimId, 1)
+        await requestClaim(secondClaimId)
+
+        const returnId = await createReturn()
+        const overReturn = await addReturnItem(returnId, 1).catch((e) => e)
+
+        expect(overReturn.response.status).toEqual(400)
+        expect(overReturn.response.data.message).toEqual(
+          `Cannot request to return more items than what was fulfilled for item ${item.id}.`
         )
       })
     })

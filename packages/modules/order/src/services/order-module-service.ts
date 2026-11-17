@@ -41,6 +41,7 @@ import {
   OrderChangeStatus,
   OrderStatus,
   promiseAll,
+  ReturnStatus,
   toMikroORMEntity,
   transformPropertiesToBigNumber,
 } from "@medusajs/framework/utils"
@@ -797,7 +798,7 @@ export default class OrderModuleService
       if (ord.currency_code) {
         ord.currency_code = normalizeCurrencyCode(ord.currency_code)
       }
-      
+
       ord.custom_display_id = await this.generateCustomDisplayId_.bind(this)(
         data_,
         sharedContext
@@ -2576,7 +2577,14 @@ export default class OrderModuleService
     } = await applyChangesToOrder(
       [order],
       { [order.id]: sortedActions },
-      { addActionReferenceToObject: true }
+      {
+        addActionReferenceToObject: true,
+        claimReturnedQuantities: await this.getClaimReturnedQuantities_(
+          [order.id],
+          sortedActions,
+          sharedContext
+        ),
+      }
     )
 
     const calculated = calculatedOrders[order.id]
@@ -3588,6 +3596,84 @@ export default class OrderModuleService
     return actions
   }
 
+  /**
+   * For each order item, the units that confirmed claims both wrote off and
+   * returned, so they are not counted twice when checking how many units can
+   * still be returned or claimed. Claims with actions in the change being
+   * processed are skipped, since those actions are counted on their own.
+   */
+  protected async getClaimReturnedQuantities_(
+    orderIds: string[],
+    actions: { claim_id?: string | null }[],
+    sharedContext: Context = {}
+  ): Promise<Record<string, BigNumberInput>> {
+    const claimsInChange = new Set(
+      actions.map((a) => a.claim_id).filter(Boolean)
+    )
+
+    const claims = await this.orderClaimService_.list(
+      { order_id: orderIds, canceled_at: null },
+      {
+        select: [
+          "id",
+          "claim_items.item_id",
+          "claim_items.quantity",
+          "claim_items.is_additional_item",
+          "return.status",
+          "return.canceled_at",
+          "return.items.item_id",
+          "return.items.quantity",
+        ],
+        relations: ["claim_items", "return", "return.items"],
+      },
+      sharedContext
+    )
+
+    const quantities: Record<string, BigNumberInput> = {}
+    for (const claim of claims) {
+      const claimReturn = claim.return
+      if (
+        claimsInChange.has(claim.id) ||
+        !claimReturn ||
+        claimReturn.canceled_at ||
+        claimReturn.status === ReturnStatus.CANCELED
+      ) {
+        continue
+      }
+
+      const writtenOff: Record<string, BigNumberInput> = {}
+      for (const item of claim.claim_items ?? []) {
+        if (item.is_additional_item) {
+          continue
+        }
+        writtenOff[item.item_id] = MathBN.add(
+          writtenOff[item.item_id] ?? 0,
+          item.quantity
+        )
+      }
+
+      const returned: Record<string, BigNumberInput> = {}
+      for (const item of claimReturn.items ?? []) {
+        returned[item.item_id] = MathBN.add(
+          returned[item.item_id] ?? 0,
+          item.quantity
+        )
+      }
+
+      for (const [itemId, quantity] of Object.entries(writtenOff)) {
+        if (!returned[itemId]) {
+          continue
+        }
+        const overlap = MathBN.lt(quantity, returned[itemId])
+          ? quantity
+          : returned[itemId]
+        quantities[itemId] = MathBN.add(quantities[itemId] ?? 0, overlap)
+      }
+    }
+
+    return quantities
+  }
+
   @InjectTransactionManager()
   private async applyOrderChanges_(
     changeActions: ApplyOrderChangeDTO[],
@@ -3644,6 +3730,11 @@ export default class OrderModuleService
       shippingMethodAdjustmentsToCreate,
     } = await applyChangesToOrder(orders, actionsMap, {
       addActionReferenceToObject: true,
+      claimReturnedQuantities: await this.getClaimReturnedQuantities_(
+        orders.map((o) => o.id),
+        Object.values(actionsMap).flat(),
+        sharedContext
+      ),
       includeTaxLinesAndAdjustmentsToPreview: async (...args) => {
         args.push(sharedContext)
         return await this.includeTaxLinesAndAdjustmentsToPreview.apply(

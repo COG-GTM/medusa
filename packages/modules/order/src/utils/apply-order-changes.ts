@@ -1,4 +1,5 @@
 import {
+  BigNumberInput,
   CreateOrderLineItemAdjustmentDTO,
   CreateOrderShippingMethodAdjustmentDTO,
   InferEntityType,
@@ -28,6 +29,7 @@ export async function applyChangesToOrder(
   options?: {
     addActionReferenceToObject?: boolean
     includeTaxLinesAndAdjustmentsToPreview?: (...args) => void
+    claimReturnedQuantities?: Record<string, BigNumberInput>
   }
 ) {
   const itemsToUpsert: InferEntityType<typeof OrderItem>[] = []
