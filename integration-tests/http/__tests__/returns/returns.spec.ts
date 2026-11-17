@@ -1369,6 +1369,44 @@ medusaIntegrationTestRunner({
     })
 
     describe("Store Returns lifecycle", () => {
+      it("should not leave a return shipping charge when a return is rejected", async () => {
+        const getOrder = async () =>
+          (
+            await api.get(
+              `/admin/orders/${order.id}?fields=*shipping_methods,summary`,
+              adminHeaders
+            )
+          ).data.order
+
+        const orderBefore = await getOrder()
+
+        const rejected = await api
+          .post(
+            "/store/returns",
+            {
+              order_id: order.id,
+              items: [{ id: order.items[0].id, quantity: 3 }],
+              return_shipping: { option_id: returnShippingOption.id },
+            },
+            storeHeaders
+          )
+          .catch((e) => e)
+
+        expect(rejected.response.status).toEqual(400)
+
+        const orderAfter = await getOrder()
+
+        expect(orderAfter.shipping_methods).toHaveLength(
+          orderBefore.shipping_methods.length
+        )
+        expect(orderAfter.summary.pending_difference).toEqual(
+          orderBefore.summary.pending_difference
+        )
+        expect(orderAfter.summary.current_order_total).toEqual(
+          orderBefore.summary.current_order_total
+        )
+      })
+
       it("should request a return", async () => {
         const createdReturn = (
           await api.post(

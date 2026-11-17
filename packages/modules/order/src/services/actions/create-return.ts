@@ -60,6 +60,7 @@ async function processShippingMethod(
   sharedContext
 ) {
   let shippingMethodId
+  let method
 
   if (!isDefined(data.shipping_method)) {
     return
@@ -74,18 +75,19 @@ async function processShippingMethod(
           return_id: returnRef.id,
         },
       ],
+      undefined,
       sharedContext
     )
     shippingMethodId = methods[0].id
+    method = methods[0]
   } else {
     shippingMethodId = data.shipping_method
+    method = await service.retrieveOrderShippingMethod(
+      shippingMethodId,
+      { relations: ["tax_lines", "adjustments"] },
+      sharedContext
+    )
   }
-
-  const method = await service.retrieveOrderShippingMethod(
-    shippingMethodId,
-    { relations: ["tax_lines", "adjustments"] },
-    sharedContext
-  )
 
   const calculatedAmount = getShippingMethodsTotals([method as any], {})[
     method.id
