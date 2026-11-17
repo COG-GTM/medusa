@@ -50,7 +50,11 @@ OrderChangeProcessing.registerActionType(ChangeActionType.RETURN_ITEM, {
 
     const quantityAvailable = MathBN.sub(
       existing!.detail?.fulfilled_quantity ?? 0,
-      existing!.detail?.return_requested_quantity ?? 0
+      MathBN.add(
+        existing!.detail?.return_requested_quantity ?? 0,
+        existing!.detail?.return_received_quantity ?? 0,
+        existing!.detail?.return_dismissed_quantity ?? 0
+      )
     )
 
     const greater = MathBN.gt(action.details?.quantity, quantityAvailable)

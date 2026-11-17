@@ -1731,6 +1731,83 @@ medusaIntegrationTestRunner({
       })
     })
 
+    describe("Claiming already claimed items", () => {
+      it("should reject a claim for units that were already claimed", async () => {
+        await api.post(
+          `/admin/orders/${order.id}/fulfillments`,
+          { items: [{ id: item.id, quantity: 2 }] },
+          adminHeaders
+        )
+
+        const firstClaimId = (
+          await api.post(
+            "/admin/claims",
+            { order_id: order.id, type: ClaimType.REFUND },
+            adminHeaders
+          )
+        ).data.claim.id
+
+        await api.post(
+          `/admin/claims/${firstClaimId}/claim-items`,
+          {
+            items: [
+              {
+                id: item.id,
+                reason: ClaimReason.PRODUCTION_FAILURE,
+                quantity: 2,
+              },
+            ],
+          },
+          adminHeaders
+        )
+        await api.post(
+          `/admin/claims/${firstClaimId}/request`,
+          {},
+          adminHeaders
+        )
+
+        const secondClaimId = (
+          await api.post(
+            "/admin/claims",
+            { order_id: order.id, type: ClaimType.REFUND },
+            adminHeaders
+          )
+        ).data.claim.id
+
+        const overClaim = await api
+          .post(
+            `/admin/claims/${secondClaimId}/claim-items`,
+            {
+              items: [
+                {
+                  id: item.id,
+                  reason: ClaimReason.PRODUCTION_FAILURE,
+                  quantity: 1,
+                },
+              ],
+            },
+            adminHeaders
+          )
+          .catch((e) => e)
+
+        expect(overClaim.response.status).toEqual(400)
+        expect(overClaim.response.data.message).toEqual(
+          "Cannot claim more items than what was ordered."
+        )
+
+        const updatedOrder = (
+          await api.get(`/admin/orders/${order.id}`, adminHeaders)
+        ).data.order
+
+        expect(updatedOrder.items[0].detail).toEqual(
+          expect.objectContaining({
+            quantity: 2,
+            written_off_quantity: 2,
+          })
+        )
+      })
+    })
+
     describe("GET /admin/claims/:id", () => {
       beforeEach(async () => {
         await api.post(

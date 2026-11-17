@@ -342,4 +342,66 @@ describe("Order Return - Actions", function () {
       },
     ])
   })
+
+  it("should not allow returning items that were already received or dismissed", function () {
+    const order = JSON.parse(JSON.stringify(originalOrder))
+    order.items[2].detail.return_received_quantity = 1
+    order.items[2].detail.return_dismissed_quantity = 1
+
+    expect(() => {
+      calculateOrderChange({
+        order,
+        actions: [
+          {
+            action: ChangeActionType.RETURN_ITEM,
+            details: {
+              reference_id: "3",
+              quantity: 2,
+            },
+          },
+        ],
+      })
+    }).toThrow(
+      "Cannot request to return more items than what was fulfilled for item 3."
+    )
+
+    const changes = calculateOrderChange({
+      order,
+      actions: [
+        {
+          action: ChangeActionType.RETURN_ITEM,
+          details: {
+            reference_id: "3",
+            quantity: 1,
+          },
+        },
+      ],
+    })
+
+    const item = JSON.parse(JSON.stringify(changes.order.items[2]))
+    expect(item.detail).toEqual(
+      expect.objectContaining({
+        return_requested_quantity: "1",
+        return_received_quantity: 1,
+        return_dismissed_quantity: 1,
+      })
+    )
+
+    expect(() => {
+      calculateOrderChange({
+        order: { ...order, items: [...changes.order.items] },
+        actions: [
+          {
+            action: ChangeActionType.RETURN_ITEM,
+            details: {
+              reference_id: "3",
+              quantity: 1,
+            },
+          },
+        ],
+      })
+    }).toThrow(
+      "Cannot request to return more items than what was fulfilled for item 3."
+    )
+  })
 })
