@@ -191,6 +191,7 @@ async function processShippingMethods(
 ) {
   for (const shippingMethod of data.shipping_methods ?? []) {
     let shippingMethodId
+    let method
 
     if (!isString(shippingMethod)) {
       const methods = await service.createOrderShippingMethods(
@@ -201,18 +202,19 @@ async function processShippingMethods(
             claim_id: claimReference.id,
           },
         ],
+        undefined,
         sharedContext
       )
       shippingMethodId = methods[0].id
+      method = methods[0]
     } else {
       shippingMethodId = shippingMethod
+      method = await service.retrieveOrderShippingMethod(
+        shippingMethodId,
+        { relations: ["tax_lines", "adjustments"] },
+        sharedContext
+      )
     }
-
-    const method = await service.retrieveOrderShippingMethod(
-      shippingMethodId,
-      { relations: ["tax_lines", "adjustments"] },
-      sharedContext
-    )
 
     const calculatedAmount = getShippingMethodsTotals([method as any], {})[
       method.id
@@ -242,6 +244,7 @@ async function processReturnShipping(
 
   if (data.return_shipping) {
     let returnShippingMethodId
+    let method
 
     if (!isString(data.return_shipping)) {
       const methods = await service.createOrderShippingMethods(
@@ -253,18 +256,19 @@ async function processReturnShipping(
             return_id: returnReference.id,
           },
         ],
+        undefined,
         sharedContext
       )
       returnShippingMethodId = methods[0].id
+      method = methods[0]
     } else {
       returnShippingMethodId = data.return_shipping
+      method = await service.retrieveOrderShippingMethod(
+        returnShippingMethodId,
+        { relations: ["tax_lines", "adjustments"] },
+        sharedContext
+      )
     }
-
-    const method = await service.retrieveOrderShippingMethod(
-      returnShippingMethodId,
-      { relations: ["tax_lines", "adjustments"] },
-      sharedContext
-    )
 
     const calculatedAmount = getShippingMethodsTotals([method as any], {})[
       method.id
