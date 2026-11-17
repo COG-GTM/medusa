@@ -97,7 +97,7 @@ const AdminPriceRules = z.array(
 export const AdminCreateShippingOptionPriceWithCurrency = z
   .object({
     currency_code: z.string(),
-    amount: z.number(),
+    amount: z.number().min(0),
     rules: AdminPriceRules.optional(),
   })
   .strict()
@@ -105,7 +105,7 @@ export const AdminCreateShippingOptionPriceWithCurrency = z
 export const AdminCreateShippingOptionPriceWithRegion = z
   .object({
     region_id: z.string(),
-    amount: z.number(),
+    amount: z.number().min(0),
     rules: AdminPriceRules.optional(),
   })
   .strict()
@@ -114,7 +114,7 @@ export const AdminUpdateShippingOptionPriceWithCurrency = z
   .object({
     id: z.string().optional(),
     currency_code: z.string().optional(),
-    amount: z.number().optional(),
+    amount: z.number().min(0).optional(),
     rules: AdminPriceRules.optional(),
   })
   .strict()
@@ -123,7 +123,7 @@ export const AdminUpdateShippingOptionPriceWithRegion = z
   .object({
     id: z.string().optional(),
     region_id: z.string().optional(),
-    amount: z.number().optional(),
+    amount: z.number().min(0).optional(),
     rules: AdminPriceRules.optional(),
   })
   .strict()

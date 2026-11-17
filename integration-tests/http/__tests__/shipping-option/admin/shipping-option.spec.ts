@@ -677,6 +677,34 @@ medusaIntegrationTestRunner({
           expect(error.response.status).toEqual(400)
         })
 
+        it("should throw error when creating a shipping option with a negative price", async () => {
+          const shippingOptionPayload = {
+            name: "Test shipping option",
+            service_zone_id: fulfillmentSet.service_zones[0].id,
+            shipping_profile_id: shippingProfile.id,
+            provider_id: "manual_test-provider",
+            price_type: "flat",
+            type: {
+              label: "Test type",
+              description: "Test description",
+              code: "test-code",
+            },
+            prices: [{ currency_code: "usd", amount: -5 }],
+          }
+
+          const error = await api
+            .post(
+              `/admin/shipping-options`,
+              shippingOptionPayload,
+              adminHeaders
+            )
+            .catch((e) => e)
+
+          expect(error.response.status).toEqual(400)
+          expect(error.response.data.type).toEqual("invalid_data")
+          expect(error.response.data.message).toContain("amount")
+        })
+
         it("should throw error when provider does not exist on a location", async () => {
           const shippingOptionPayload = {
             name: "Test shipping option",

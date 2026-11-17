@@ -1,5 +1,7 @@
 ---
 "@medusajs/medusa": patch
+"@medusajs/pricing": patch
+"@medusajs/core-flows": patch
 ---
 
-fix(medusa): reject negative variant and price list prices in the Admin API
+fix: reject negative prices in the Admin API and the pricing module, and return a 400 when adding an item with a negative price to a cart

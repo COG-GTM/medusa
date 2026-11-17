@@ -1,4 +1,4 @@
-import { MedusaError, isPresent } from "@medusajs/framework/utils"
+import { MathBN, MedusaError, isPresent } from "@medusajs/framework/utils"
 import { createStep } from "@medusajs/framework/workflows-sdk"
 
 /**
@@ -46,9 +46,12 @@ export const validateLineItemPricesStep = createStep(
     }
 
     const priceNotFound: string[] = []
+    const negativePrice: string[] = []
     for (const item of data.items) {
       if (!isPresent(item?.unit_price)) {
         priceNotFound.push(item.title)
+      } else if (MathBN.lt(item.unit_price!, 0)) {
+        negativePrice.push(item.title)
       }
     }
 
@@ -56,6 +59,13 @@ export const validateLineItemPricesStep = createStep(
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
         `Items ${priceNotFound.join(", ")} do not have a price`
+      )
+    }
+
+    if (negativePrice.length > 0) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        `Items ${negativePrice.join(", ")} have a negative price`
       )
     }
   }
