@@ -51,7 +51,7 @@ The diagram source is [`diagrams/architecture.dot`](diagrams/architecture.dot) (
 ## Data and infrastructure
 
 - Every data module uses MikroORM on the same PostgreSQL database, with its own tables and migrations (`medusa db:migrate` runs them, plus link table migrations).
-- Without `REDIS_URL`, the app uses in-process defaults (local event bus, in-memory cache and workflow engine). `defineConfig` swaps in the Redis event bus, cache, workflow engine and the Redis locking provider when `REDIS_URL` is set.
+- A self-hosted app uses in-process defaults (local event bus, in-memory cache and workflow engine) unless its `medusa-config` registers the Redis modules (`@medusajs/medusa/event-bus-redis`, `cache-redis`, `workflow-engine-redis`, `locking-redis`). `defineConfig` adds them from `REDIS_URL` automatically only on Medusa Cloud (`EXECUTION_CONTEXT=medusa-cloud`).
 - External services are reached only through providers, for example Stripe (`payment-stripe`), S3 (`file-s3`), SendGrid (`notification-sendgrid`) and PostHog (`analytics-posthog`).
 
 ## Build and test

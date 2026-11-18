@@ -32,7 +32,7 @@ digraph medusa {
   }
 
   pg    [label="PostgreSQL\n(MikroORM; one table set per module,\nlink tables for module links)", shape=cylinder, fillcolor="#fdeaea"]
-  redis [label="Redis (optional)\nset REDIS_URL to swap in\nredis event bus, cache,\nworkflow engine, locking", shape=cylinder, fillcolor="#fdeaea"]
+  redis [label="Redis (optional)\nredis event bus, cache,\nworkflow engine, locking\nwhen configured", shape=cylinder, fillcolor="#fdeaea"]
   ext   [label="External services\nStripe, S3, SendGrid,\nPostHog, OAuth/OIDC IdPs", fillcolor="#fdeaea"]
 
   storefront -> http [label="REST /store\n(publishable API key)"]
