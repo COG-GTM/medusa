@@ -12,23 +12,31 @@ Open-source commerce platform. TypeScript monorepo with 30+ modular commerce pac
 
 ```
 /packages/
-├── medusa/              # Main Medusa package
+├── medusa/              # Main Medusa package (API routes, CLI commands, loaders)
 ├── core/                # Core framework packages
 │   ├── framework/       # Core runtime
 │   ├── types/           # TypeScript definitions
 │   ├── utils/           # Utilities
 │   ├── workflows-sdk/   # Workflow composition
+│   ├── orchestration/   # Workflow/transaction orchestrator
 │   ├── core-flows/      # Predefined workflows
-│   └── modules-sdk/     # Module development
-├── modules/             # 30+ commerce modules
+│   ├── modules-sdk/     # Module development
+│   ├── query/           # Cross-module Query
+│   ├── js-sdk/          # JS client SDK
+│   └── instantsearch-adapter/
+├── modules/             # 30+ commerce and infrastructure modules
 │   ├── product/, order/, cart/, payment/...
-│   └── providers/       # 15+ provider implementations
+│   └── providers/       # 16 provider implementations
+├── plugins/             # First-party plugins (draft-order, loyalty)
 ├── admin/               # Dashboard packages
-│   └── dashboard/       # React admin UI
-├── cli/                 # CLI tools
-└── design-system/       # UI components
+│   ├── dashboard/       # React admin UI
+│   └── admin-sdk/, admin-shared/, admin-bundler/, admin-vite-plugin/
+├── cli/                 # CLI tools (medusa-cli, create-medusa-app, oas, http-types-generator)
+├── design-system/       # UI components (ui, ui-preset, icons, toolbox)
+└── medusa-test-utils/   # Integration test runners
 /integration-tests/      # Full-stack tests
 /www/                    # Documentation site
+/docs/architecture.md    # Repo architecture overview and diagram
 ```
 
 **Key Directories:**
@@ -37,6 +45,7 @@ Open-source commerce platform. TypeScript monorepo with 30+ modular commerce pac
 - `packages/medusa/src/api/` - API routes
 - `packages/modules/` - Commerce feature modules
 - `packages/admin/dashboard/` - Admin React app
+- `packages/plugins/` - First-party plugins built with `build:plugin`
 
 ### 2. Build System & Commands
 
@@ -95,7 +104,7 @@ Skipping this leaves `Property <key> is not allowed` warnings on `en.json`, sinc
 **Frameworks:**
 
 - Jest 29.7.0 (backend/core)
-- Vitest 3.0.5 (admin/frontend)
+- Vitest 4.1 (admin/dashboard, design-system/ui)
 
 **Test Locations:**
 

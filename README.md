@@ -44,7 +44,25 @@ To set up a Medusa application locally, visit the [Documentation](https://docs.m
 
 Medusa is a commerce platform with a built-in framework for customization that allows you to build custom commerce applications without reinventing core commerce logic. The framework and modules can be used to support advanced B2B or DTC commerce stores, marketplaces, distributor platforms, PoS systems, service businesses, or similar solutions that need foundational commerce primitives. Medusa's core commerce modules are open-source and freely available on npm. Enterprise Edition features are identified separately in the repository.
 
-Learn more about [Medusa’s architecture](https://docs.medusajs.com/learn/advanced-development/architecture/overview) and [commerce modules](https://docs.medusajs.com/resources/commerce-modules) in the Docs.
+Learn more about [Medusa’s architecture](https://docs.medusajs.com/learn/introduction/architecture) and [commerce modules](https://docs.medusajs.com/resources/commerce-modules) in the Docs.
+
+## Repository Layout
+
+This repository is a Yarn 3 + Turbo monorepo. See [docs/architecture.md](docs/architecture.md) for the architecture diagram, what each package does, and how an application boots and handles requests.
+
+| Path                     | Contents                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------- |
+| `packages/medusa`        | The `@medusajs/medusa` application package: API routes, CLI commands, loaders                 |
+| `packages/core`          | Framework, modules SDK, workflows SDK, orchestration, core flows, Query, types, utils, JS SDK |
+| `packages/modules`       | Commerce and infrastructure modules, with providers in `packages/modules/providers`           |
+| `packages/plugins`       | First-party plugins (`draft-order`, `loyalty`)                                                |
+| `packages/admin`         | Admin dashboard, admin SDK and bundler                                                        |
+| `packages/cli`           | `medusa` CLI, `create-medusa-app`, OpenAPI tooling                                            |
+| `packages/design-system` | Medusa UI components, preset, icons                                                           |
+| `integration-tests`      | HTTP and module integration test suites                                                       |
+| `www`                    | Documentation site (separate workspace with its own `yarn.lock`)                              |
+
+To work on the packages themselves, use Node 22 (see `.nvmrc`; packages require Node `^20.19.0 || >=22.12.0`) and the pinned Yarn 3.2.1 (`corepack enable`), then run `yarn install`, `yarn build` and `yarn test`. The [Contribution Guide](CONTRIBUTING.md) explains how to test local packages in a Medusa application.
 
 ## Upgrades & Integrations
 
