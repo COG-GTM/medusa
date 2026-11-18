@@ -1,0 +1,57 @@
+// Medusa monorepo runtime architecture (develop branch).
+// Edit this file, then run ./render.sh to regenerate architecture.png and architecture.svg.
+digraph medusa {
+  graph [rankdir=TB, fontname="DejaVu Sans", fontsize=18, nodesep=0.35, ranksep=0.6,
+         labelloc=t, label="Medusa: how a request flows through the monorepo packages", pad=0.3]
+  node  [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=15, fillcolor=white, color="#555555"]
+  edge  [fontname="DejaVu Sans", fontsize=12, color="#555555"]
+
+  subgraph cluster_clients {
+    label="Clients"; style="rounded,dashed"; color="#888888"
+    storefront [label="Storefront\n(separate repo, e.g. Next.js starter)\nvia @medusajs/js-sdk\npackages/core/js-sdk", fillcolor="#e8f1fb"]
+    admin_ui   [label="Admin dashboard (React + Vite)\npackages/admin/dashboard\nserved at /app", fillcolor="#e8f1fb"]
+    webhooks   [label="Payment provider\nwebhooks", fillcolor="#e8f1fb"]
+  }
+
+  subgraph cluster_app {
+    label="Medusa application process  (packages/medusa, started by `medusa start|develop`)"; style="rounded"; color="#3b6ea5"
+    cli     [label="CLI + loaders\npackages/cli/medusa-cli\npackages/medusa/src/commands, loaders\nworkerMode: shared | server | worker", fillcolor="#fff6e0"]
+    http    [label="Express HTTP layer\npackages/core/framework/src/http\nfile-based routes + middlewares\n(auth, publishable key, RBAC, errors)", fillcolor="#fff6e0"]
+    routes  [label="API routes  packages/medusa/src/api\n/store  /admin  /auth  /hooks", fillcolor="#fff6e0"]
+    flows   [label="Workflows\npackages/core/core-flows\n(built with workflows-sdk + orchestration;\nsteps with compensation)", fillcolor="#e9f6ec"]
+    query   [label="Query / Link\npackages/core/query, modules-sdk,\nmodules/link-modules\n(cross-module graph reads)", fillcolor="#e9f6ec"]
+    bg      [label="Subscribers + scheduled jobs\n(run in shared/worker mode)", fillcolor="#e9f6ec"]
+    plugins [label="Plugins  packages/plugins\ndraft-order, loyalty\n(add routes, workflows, modules,\nlinks, subscribers, admin UI)", fillcolor="#f3ecfb"]
+  }
+
+  subgraph cluster_modules {
+    label="Modules  (packages/modules, loaded by MedusaAppLoader / modules-sdk; isolated, no direct imports between them)"; style="rounded"; color="#3b6ea5"
+    commerce [label="Commerce modules\nproduct  pricing  promotion  cart  order\ncustomer  payment  fulfillment  inventory\nstock-location  region  tax  sales-channel\nstore  currency  user  auth  api-key\ntranslation  rbac  settings", fillcolor="#eef3f8"]
+    infra    [label="Infrastructure modules\nworkflow-engine (inmemory | redis)\nevent-bus (local | redis)  cache  caching\nlocking  file  notification  index\nsearch  analytics", fillcolor="#eef3f8"]
+    providers [label="Providers  packages/modules/providers\npayment-stripe  file-local  file-s3\nauth-emailpass  auth-github  auth-google  auth-oidc\nnotification-local  notification-sendgrid\nfulfillment-manual  locking-postgres  locking-redis\ncaching-redis  analytics-local  analytics-posthog\nsearch-postgres", fillcolor="#eef3f8"]
+  }
+
+  pg    [label="PostgreSQL\n(MikroORM; one table set per module,\nlink tables for module links)", shape=cylinder, fillcolor="#fdeaea"]
+  redis [label="Redis (optional)\nredis event bus, cache,\nworkflow engine, locking\nwhen configured", shape=cylinder, fillcolor="#fdeaea"]
+  ext   [label="External services\nStripe, S3, SendGrid,\nPostHog, OAuth/OIDC IdPs", fillcolor="#fdeaea"]
+
+  storefront -> http [label="REST /store\n(publishable API key)"]
+  admin_ui   -> http [label="REST /admin, /auth"]
+  webhooks   -> http [label="/hooks/payment"]
+  cli -> http [label="boots"]
+  http -> routes
+  routes -> flows [label="mutations"]
+  routes -> query [label="reads"]
+  flows -> commerce [label="steps call\nmodule services"]
+  flows -> infra
+  query -> commerce
+  bg -> flows
+  infra -> bg [label="events", style=dashed]
+  plugins -> routes [style=dashed, arrowhead=none]
+  plugins -> flows [style=dashed, arrowhead=none]
+  commerce -> providers [label="provider\nresolution"]
+  infra -> providers
+  commerce -> pg
+  infra -> redis [style=dashed]
+  providers -> ext
+}
